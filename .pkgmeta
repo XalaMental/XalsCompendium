@@ -1,0 +1,13 @@
+package-as: XalsCompendium
+
+# Files/folders in the repo that shouldn't end up inside the distributed addon
+# zip - players don't need CI config or git's own housekeeping files.
+ignore:
+  - .github
+  - .gitignore
+
+# Use our hand-maintained, styled changelog as the release changelog on
+# CurseForge instead of the packager's auto-generated commit list.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
