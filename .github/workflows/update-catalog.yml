@@ -1,0 +1,37 @@
+name: Update Quest Catalog
+
+# Runs daily to catch new WoW builds (new quests), plus manually on demand
+# via the Actions tab.
+on:
+  schedule:
+    - cron: '0 12 * * *' # 12:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  update-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run extraction
+        env:
+          BLIZZARD_CLIENT_ID: ${{ secrets.BLIZZARD_CLIENT_ID }}
+          BLIZZARD_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
+        run: python3 .github/scripts/extract_quests.py
+
+      # Never auto-publishes unreviewed data straight to players - opens a
+      # PR instead, per the locked "max automation short of risking bad
+      # data reaching players" decision. A no-op (empty diff) simply opens
+      # no PR - this action only acts when there's actually something new.
+      - name: Open PR with any changes
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Quest catalog update"
+          title: "Quest catalog update"
+          body: "Automated quest catalog update - new quest IDs were found and looked up. Review the diff before merging."
+          branch: catalog-update
+          delete-branch: true
