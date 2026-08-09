@@ -1,0 +1,24 @@
+## Interface: 120007
+## Title: Xal's Compendium
+## Notes: Daily & weekly quest and activity tracker.
+## Author: Xal
+## Version: @project-version@
+## X-Curse-Project-ID: 1645114
+## IconTexture: Interface\AddOns\XalsCompendium\Icon.png
+## SavedVariables: XComp_DB
+## SavedVariablesPerCharacter: XComp_CharDB
+
+# Minimap button libraries - must load before Core.lua, which registers
+# with them. Standard community libraries (LibStub/CallbackHandler/
+# LibDataBroker/LibDBIcon), same foundation almost every addon with a
+# minimap button uses.
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+# Load order: Core (creates the shared XComp table) → Data → UI files
+Core.lua
+Data.lua
+UI.lua
+Options.lua
