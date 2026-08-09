@@ -24,9 +24,15 @@ narrow ~6,246 "Task"-quest subset, not the general catalog):
      Data.lua's D:RunDiagnostics for the addon side of that.
 
 Requires two GitHub Actions secrets: BLIZZARD_CLIENT_ID, BLIZZARD_CLIENT_SECRET
-- a free OAuth client, registered at develop.battle.net. Without them, the ID
-snapshot still updates (so the diff stays accurate for next time) but name
-lookups are skipped.
+- a free OAuth client, registered at develop.battle.net. Without them, nothing
+runs this pass (no lookups happened, so nothing should be marked as resolved).
+
+Capped and resumable: a full first-run backfill covers every quest ID that has
+EVER existed (tens of thousands), which would take hours - way past GitHub
+Actions' 6-hour job limit. Each run only processes MAX_LOOKUPS_PER_RUN ids and
+saves progress every SAVE_EVERY lookups, so an interrupted/cancelled run only
+loses a small batch, not everything, and whatever's left over just gets
+picked up automatically by the next scheduled run (or a manual re-trigger).
 """
 import base64
 import csv
@@ -49,6 +55,8 @@ ID_SNAPSHOT_PATH = ".github/data/quest_ids.json"
 CATALOG_OUTPUT_PATH = ".github/data/catalog_data.json"
 
 REQUEST_DELAY = 0.05  # ~20 req/sec - well under Blizzard's API rate limit
+MAX_LOOKUPS_PER_RUN = 2000  # keeps a single run safely under GitHub's 6-hour job limit
+SAVE_EVERY = 200  # flush progress periodically so an interrupted run doesn't lose it all
 
 
 def fetch_current_quest_ids():
@@ -121,9 +129,13 @@ def main():
     current_ids = fetch_current_quest_ids()
     print(f"  {len(current_ids)} quest IDs found in the live client.")
 
+    # known_ids means "already resolved" (looked up or confirmed no record) -
+    # NOT "currently exists in the client". A quest only gets added here once
+    # it's actually been processed, so a capped/interrupted run correctly
+    # leaves the leftover ids "new" again for the next run to pick up.
     known_ids = set(load_json(ID_SNAPSHOT_PATH, []))
     new_ids = sorted(current_ids - known_ids)
-    print(f"  {len(new_ids)} new quest IDs since the last run.")
+    print(f"  {len(new_ids)} unresolved quest IDs (new, or left over from a previous capped run).")
 
     if not new_ids:
         print("Nothing new - catalog is already up to date.")
@@ -131,26 +143,38 @@ def main():
 
     token = get_access_token()
     if not token:
-        # Still update the ID snapshot so next run's diff stays accurate,
-        # even though we can't look up names this time.
-        save_json(ID_SNAPSHOT_PATH, sorted(current_ids))
+        # Nothing was actually looked up this run - don't touch the
+        # snapshot, or these ids would be wrongly marked resolved forever.
         return 0
 
+    batch = new_ids[:MAX_LOOKUPS_PER_RUN]
+    remaining = len(new_ids) - len(batch)
+    print(f"  Looking up {len(batch)} this run" + (f" ({remaining} left for future runs)." if remaining else "."))
+
     catalog = load_json(CATALOG_OUTPUT_PATH, {})
+    resolved_ids = set(known_ids)
     looked_up, skipped = 0, 0
-    for quest_id in new_ids:
+
+    for i, quest_id in enumerate(batch, start=1):
         name = fetch_quest_name(quest_id, token)
         if name:
             catalog[str(quest_id)] = {"name": name}
             looked_up += 1
         else:
             skipped += 1
+        resolved_ids.add(quest_id)  # either way, this id is now resolved - don't ask again
+
+        if i % SAVE_EVERY == 0:
+            save_json(CATALOG_OUTPUT_PATH, catalog)
+            save_json(ID_SNAPSHOT_PATH, sorted(resolved_ids))
+            print(f"  ...saved progress at {i}/{len(batch)}")
+
         time.sleep(REQUEST_DELAY)
 
     print(f"  Looked up {looked_up} names, {skipped} had no retrievable API record.")
 
     save_json(CATALOG_OUTPUT_PATH, catalog)
-    save_json(ID_SNAPSHOT_PATH, sorted(current_ids))
+    save_json(ID_SNAPSHOT_PATH, sorted(resolved_ids))
     return 0
 
 
