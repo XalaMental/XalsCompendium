@@ -1,5 +1,14 @@
 # Xal's Compendium - Changelog
 
+## 1.0.3 - August 10, 2026
+
+---
+
+Fixed the quest catalog updater finding zero real quests on its first real run, plus brought the release tooling in line with the current standard.
+
+### 🐛 Fixed
+- The quest catalog updater was checking the oldest quests in the game first, which Blizzard's own data doesn't have records for - it now checks the newest ones first, so it actually finds real, current quests.
+
 ## 1.0.2 - August 9, 2026
 
 ---
