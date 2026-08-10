@@ -1,6 +1,24 @@
 # Xal's Compendium - Changelog
 
+## Release 1.0.2 - August 9, 2026
+
+---
+
+Fixed the quest catalog updater crashing on a transient network hiccup and losing an entire run's progress.
+
+### 🐛 Fixed
+- A brief connection error while talking to Blizzard's servers used to crash the whole update instead of just retrying - now it retries automatically before giving up, so a temporary network blip doesn't waste a run.
+
 ## Release 1.0.1 - August 9, 2026
+
+---
+
+Fixed a real problem in the quest catalog update tooling before it ever ran for real.
+
+### 🐛 Fixed
+- The quest catalog updater could have run for hours on its very first pass and lost all its progress if interrupted. It now works in small, safe batches and saves as it goes.
+
+## Release 1.0.0 - August 8, 2026
 
 ---
 
