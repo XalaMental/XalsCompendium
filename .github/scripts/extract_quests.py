@@ -39,6 +39,8 @@ import csv
 import io
 import json
 import os
+import socket
+import ssl
 import sys
 import time
 import urllib.error
@@ -58,15 +60,54 @@ REQUEST_DELAY = 0.05  # ~20 req/sec - well under Blizzard's API rate limit
 MAX_LOOKUPS_PER_RUN = 2000  # keeps a single run safely under GitHub's 6-hour job limit
 SAVE_EVERY = 200  # flush progress periodically so an interrupted run doesn't lose it all
 
+MAX_RETRIES = 4
+RETRY_BACKOFF = 3  # seconds, doubles each retry (3, 6, 12, 24)
+
+# Real failure mode hit in production (2026-08-09): a transient SSL/connection
+# error mid-run to oauth.battle.net crashed the WHOLE script uncaught, wasting
+# a 15-minute run that had already fetched 66,412 quest IDs from wago.tools
+# for nothing. Every network call is now retried against these transient
+# error types before giving up - HTTPError (a real server response, e.g. 404)
+# is deliberately NOT retried here, that's handled separately per-caller.
+TRANSIENT_ERRORS = (urllib.error.URLError, ssl.SSLError, socket.timeout, ConnectionError)
+
+
+def with_retries(description, fn):
+    """Calls fn() with no args, retrying on transient network errors with
+    exponential backoff. Raises the last error if every attempt fails.
+
+    HTTPError is deliberately let through immediately, NOT retried here -
+    it means a real response came back (e.g. a 404), which is a valid
+    outcome each caller handles itself, not a connection-level problem.
+    It has to be checked first since HTTPError is actually a SUBCLASS of
+    URLError in Python - without this check it would get caught below too
+    and every legitimate 404 would burn through 4 pointless retries."""
+    delay = RETRY_BACKOFF
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return fn()
+        except urllib.error.HTTPError:
+            raise
+        except TRANSIENT_ERRORS as err:
+            if attempt == MAX_RETRIES:
+                print(f"  {description} failed after {MAX_RETRIES} attempts: {err}")
+                raise
+            print(f"  {description} failed (attempt {attempt}/{MAX_RETRIES}: {err}) - retrying in {delay}s...")
+            time.sleep(delay)
+            delay *= 2
+
 
 def fetch_current_quest_ids():
     """Every quest ID that currently exists in the live client, from
     wago.tools' auto-updated QuestV2 DB2 dump."""
-    req = urllib.request.Request(
-        QUESTV2_CSV_URL, headers={"User-Agent": "XalsCompendium-Extractor/1.0"}
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        text = resp.read().decode("utf-8")
+    def _do():
+        req = urllib.request.Request(
+            QUESTV2_CSV_URL, headers={"User-Agent": "XalsCompendium-Extractor/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read().decode("utf-8")
+
+    text = with_retries("Fetching quest ID list from wago.tools", _do)
     reader = csv.DictReader(io.StringIO(text))
     ids = set()
     for row in reader:
@@ -100,12 +141,22 @@ def get_access_token():
         print("BLIZZARD_CLIENT_ID / BLIZZARD_CLIENT_SECRET not set - name lookups will be skipped.")
         return None
 
-    data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
-    req = urllib.request.Request(OAUTH_TOKEN_URL, data=data)
-    auth = f"{client_id}:{client_secret}".encode()
-    req.add_header("Authorization", b"Basic " + base64.b64encode(auth))
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+    def _do():
+        data = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode()
+        req = urllib.request.Request(OAUTH_TOKEN_URL, data=data)
+        auth = f"{client_id}:{client_secret}".encode()
+        req.add_header("Authorization", b"Basic " + base64.b64encode(auth))
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        payload = with_retries("Getting Blizzard OAuth token", _do)
+    except TRANSIENT_ERRORS:
+        # A persistent connection problem shouldn't kill a run that already
+        # did useful work (the ID snapshot fetch) - degrade to "no lookups
+        # this pass" instead of crashing the whole script.
+        print("  Could not reach Blizzard's OAuth endpoint - name lookups will be skipped this run.")
+        return None
     return payload.get("access_token")
 
 
@@ -113,15 +164,18 @@ def fetch_quest_name(quest_id, token):
     """Returns the quest's real name, or None if the API has no record for
     it (a valid outcome, not an error - some client-side IDs have no public
     API record, e.g. removed/internal-only quests)."""
-    url = f"{QUEST_API_URL.format(id=quest_id)}?namespace={NAMESPACE}&locale={LOCALE}&access_token={token}"
-    try:
+    def _do():
+        url = f"{QUEST_API_URL.format(id=quest_id)}?namespace={NAMESPACE}&locale={LOCALE}&access_token={token}"
         with urllib.request.urlopen(url, timeout=15) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-        return payload.get("title") or payload.get("name")
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        payload = with_retries(f"Looking up quest {quest_id}", _do)
     except urllib.error.HTTPError as err:
         if err.code == 404:
             return None
         raise
+    return payload.get("title") or payload.get("name")
 
 
 def main():
