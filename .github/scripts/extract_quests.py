@@ -188,7 +188,14 @@ def main():
     # it's actually been processed, so a capped/interrupted run correctly
     # leaves the leftover ids "new" again for the next run to pick up.
     known_ids = set(load_json(ID_SNAPSHOT_PATH, []))
-    new_ids = sorted(current_ids - known_ids)
+    # Newest (highest ID) first, not oldest - confirmed via Blizzard's own
+    # developer forums that the Quest API excludes obsolete/disabled quests
+    # from old expansion content, which are concentrated in low ID ranges.
+    # Processing ascending meant the very first run burned its entire 2000-
+    # lookup cap on old Vanilla-era quests that were never going to resolve
+    # (real result: 0 names found out of 2000). Newest content is both more
+    # likely to have a real API record AND more relevant to this addon.
+    new_ids = sorted(current_ids - known_ids, reverse=True)
     print(f"  {len(new_ids)} unresolved quest IDs (new, or left over from a previous capped run).")
 
     if not new_ids:
