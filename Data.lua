@@ -78,34 +78,6 @@ D.Catalog = {
 	},
 }
 
--- TEMPORARY test items, for verifying the section-tree UI renders and
--- collapses correctly before the real extraction pipeline exists. No real
--- questID yet since this pass is about layout, not auto-detection - remove
--- once real catalog data is in place. Placed under Current -> Daily ->
--- Reputation/Custom and Current -> Weekly -> Reputation, matching the new
--- content-type categories.
-local currentTier = D.Catalog.tiers[1]
-local dailyType = currentTier.types[1]
-local weeklyType = currentTier.types[2]
-table.insert(dailyType.categories[5].items, { uid = "test-daily-1", name = "[TEST] Daily Item One", children = {
-	{ uid = "test-daily-1-child1", name = "[TEST] Sub-step A", children = {} },
-	{ uid = "test-daily-1-child2", name = "[TEST] Sub-step B", children = {} },
-} }) -- categories[5] = Reputation
-table.insert(dailyType.categories[8].items, { uid = "test-daily-2", name = "[TEST] Daily Item Two", children = {} }) -- categories[8] = Custom
-table.insert(weeklyType.categories[5].items, { uid = "test-weekly-pvp-1", name = "[TEST] Weekly PvP Item", children = {} }) -- categories[5] = Reputation
-
--- TEMPORARY test items for time-gating (build-plan item 21) - one active
--- right now, one that hasn't started yet, one already expired. Only the
--- first should ever show up on the tracker; if the other two appear,
--- IsWithinActiveWindow is broken. Remove alongside the other [TEST] items
--- once real catalog data (with real activeFrom/activeUntil) lands.
-table.insert(dailyType.categories[8].items, { uid = "test-gated-active", name = "[TEST] Time-gated (active now)", children = {},
-	activeFrom = time() - 86400, activeUntil = time() + 86400 }) -- categories[8] = Custom
-table.insert(dailyType.categories[8].items, { uid = "test-gated-future", name = "[TEST] Time-gated (not started yet - should be hidden)", children = {},
-	activeFrom = time() + 86400 })
-table.insert(dailyType.categories[8].items, { uid = "test-gated-expired", name = "[TEST] Time-gated (expired - should be hidden)", children = {},
-	activeUntil = time() - 86400 })
-
 -- Catalog item shape (for reference - the extraction pipeline fills these in):
 -- {
 --     uid = "unique-stable-id",       -- ours, stable across patches even if questID changes
