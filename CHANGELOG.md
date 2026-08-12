@@ -1,5 +1,14 @@
 # Xal's Compendium - Changelog
 
+## 1.0.5 - August 11, 2026
+
+---
+
+I've been trying to get the quest data pulling fully automated, and honestly it's taken a few more tries than I expected - a couple of attempts came back broken and I had to dig into why before pushing forward. It's not fully done yet, but I'm actively on it and hopeful it'll be up and running clean in the next update. Appreciate the patience while I get this right.
+
+### 🐛 Fixed
+- The quest catalog updater now keeps everything it learns about each quest, not just the name - the next step is using that to automatically sort quests into their real spots instead of a manual sorting pass.
+
 ## 1.0.4 - August 11, 2026
 
 ---
