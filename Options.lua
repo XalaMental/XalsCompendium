@@ -71,6 +71,8 @@ function O:ResetToDefaults()
 	XComp_DB.settings.frameless = nil
 	XComp_DB.settings.bgAlpha = nil
 	XComp_DB.settings.scale = nil
+	XComp_DB.settings.idleAlpha = nil
+	XComp_DB.settings.minimized = nil
 	XComp_DB.settings.typeOrder = nil
 	XComp_DB.settings.categoryOrder = nil
 	XComp_DB.itemColors = {}
@@ -78,6 +80,8 @@ function O:ResetToDefaults()
 	XComp_DB.bgColor = nil
 	if XComp.UI then
 		XComp.UI:ApplyTheme()
+		XComp.UI:ApplyIdleAlpha()
+		XComp.UI:ApplyMinimizedState()
 		if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 			XComp.UI:RefreshSections()
 		end
@@ -178,19 +182,24 @@ end
 -- standalone window - two separate, independent access paths to the same
 -- settings, not one path styled two ways)
 -------------------------------------------------
--- Flat, self-drawn button matching Compendium's OWN locked button spec -
--- thin LIGHT (not accent-colored) border, semi-transparent dark fill,
--- plain white text, no bevel/gradient. Reference: the EllesmereUI Game
--- Menu screenshot the user provided when this addon's look was first
--- locked in. Used for every button in the addon (Reset to Defaults, Run
--- Diagnostics, the standalone window's tabs) instead of Blizzard's chunky
--- UIPanelButtonTemplate. Optional :SetSelected() is only used by tabs.
-local BTN_BORDER = { 0.75, 0.75, 0.78, 1 }
-local BTN_BORDER_SELECTED = { 1, 1, 1, 1 }
+-- Flat, self-drawn button - Xal's shared brand button (locked in 2026-08-09,
+-- confirmed as the standard for every addon). Semi-transparent dark fill,
+-- no bevel/gradient, border hand-drawn from 4 pixel-snapped textures instead
+-- of Blizzard's backdrop-edge system (which doesn't render symmetric at a
+-- non-integer UI Scale). Border is the addon's live accent color (not a
+-- fixed grey) - ties buttons back to the rest of the panel. Selection is
+-- carried by fill brightness + label color, NOT border color (border stays
+-- accent either way). Used for every button in the addon instead of
+-- Blizzard's chunky UIPanelButtonTemplate. Optional :SetSelected() is only
+-- used by tabs.
+local LINE_THICKNESS = 2
+-- Unselected label color - warm amber-orange (matched from WoW's own "World
+-- Quests" header text). Selected label is pure white.
+local BTN_LABEL_UNSELECTED = { 0.95, 0.60, 0.10 }
 
 local function MakeFlatButton(parent, anchorTo, width, text, onClick)
 	local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
-	btn:SetSize(width, 22)
+	PixelUtil.SetSize(btn, width, 22)
 	if anchorTo then
 		btn:SetPoint("LEFT", anchorTo, "RIGHT", 4, 0)
 	elseif anchorTo == false then
@@ -200,16 +209,44 @@ local function MakeFlatButton(parent, anchorTo, width, text, onClick)
 	end
 	btn:SetBackdrop({
 		bgFile = "Interface\\Buttons\\WHITE8x8",
-		edgeFile = "Interface\\Buttons\\WHITE8x8",
-		edgeSize = 2,
 	})
 	btn:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
-	btn:SetBackdropBorderColor(BTN_BORDER[1], BTN_BORDER[2], BTN_BORDER[3], BTN_BORDER[4])
+
+	local borderTop = btn:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderTop, "TOPLEFT", btn, "TOPLEFT", 0, 0)
+	PixelUtil.SetPoint(borderTop, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+	PixelUtil.SetHeight(borderTop, LINE_THICKNESS)
+
+	local borderBottom = btn:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderBottom, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+	PixelUtil.SetPoint(borderBottom, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+	PixelUtil.SetHeight(borderBottom, LINE_THICKNESS)
+
+	local borderLeft = btn:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderLeft, "TOPLEFT", btn, "TOPLEFT", 0, 0)
+	PixelUtil.SetPoint(borderLeft, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+	PixelUtil.SetWidth(borderLeft, LINE_THICKNESS)
+
+	local borderRight = btn:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderRight, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+	PixelUtil.SetPoint(borderRight, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+	PixelUtil.SetWidth(borderRight, LINE_THICKNESS)
+
+	local function SetBorderColor(r, g, b, a)
+		borderTop:SetColorTexture(r, g, b, a)
+		borderBottom:SetColorTexture(r, g, b, a)
+		borderLeft:SetColorTexture(r, g, b, a)
+		borderRight:SetColorTexture(r, g, b, a)
+	end
+	do
+		local ar, ag, ab = XComp.GetAccentColor()
+		SetBorderColor(ar, ag, ab, 1)
+	end
 
 	local label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	label:SetPoint("CENTER")
 	label:SetText(text)
-	label:SetTextColor(1, 1, 1, 1)
+	label:SetTextColor(BTN_LABEL_UNSELECTED[1], BTN_LABEL_UNSELECTED[2], BTN_LABEL_UNSELECTED[3], 1)
 	btn.label = label
 
 	btn:SetScript("OnEnter", function(self)
@@ -222,17 +259,23 @@ local function MakeFlatButton(parent, anchorTo, width, text, onClick)
 
 	function btn:SetSelected(selected)
 		self.selected = selected
+		local ar, ag, ab = XComp.GetAccentColor()
+		SetBorderColor(ar, ag, ab, 1)
 		if selected then
 			self:SetBackdropColor(0.22, 0.22, 0.22, 0.85)
-			self:SetBackdropBorderColor(BTN_BORDER_SELECTED[1], BTN_BORDER_SELECTED[2], BTN_BORDER_SELECTED[3], BTN_BORDER_SELECTED[4])
+			label:SetTextColor(1, 1, 1, 1)
 		else
 			self:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
-			self:SetBackdropBorderColor(BTN_BORDER[1], BTN_BORDER[2], BTN_BORDER[3], BTN_BORDER[4])
+			label:SetTextColor(BTN_LABEL_UNSELECTED[1], BTN_LABEL_UNSELECTED[2], BTN_LABEL_UNSELECTED[3], 1)
 		end
 	end
 
 	return btn
 end
+
+-- Hand-drawn checkbox - shared XComp.MakeCheckbox, defined in Core.lua so
+-- both this file and UI.lua can use it.
+local MakeCheckbox = XComp.MakeCheckbox
 
 -- Builds the common header (title, divider, reset button) onto any parent
 -- frame - shared between the native panel and the standalone window so
@@ -249,7 +292,7 @@ local function BuildHeader(parent, onReset)
 
 	local divider = parent:CreateTexture(nil, "ARTWORK")
 	divider:SetColorTexture(ar, ag, ab, 1)
-	divider:SetHeight(1)
+	divider:SetHeight(LINE_THICKNESS)
 	divider:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	divider:SetPoint("RIGHT", parent, "RIGHT", -16, 0)
 
@@ -354,16 +397,15 @@ function O:PopulateGeneralRows(container)
 		anchorTo = row
 		table.insert(container.rows, row)
 
-		local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-		cb:SetSize(22, 22)
+		local cb = MakeCheckbox(row, 22)
 		cb:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
 		cb:SetChecked(self:IsTypeEnabled(typeSection.key))
-		cb:SetScript("OnClick", function(btn)
+		cb.OnToggle = function(btn)
 			self:SetTypeEnabled(typeSection.key, btn:GetChecked() and true or false)
 			if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 				XComp.UI:RefreshSections()
 			end
-		end)
+		end
 
 		-- Order buttons, top-right of the row.
 		local downBtn = CreateFrame("Button", nil, row)
@@ -432,17 +474,16 @@ function O:PopulateGeneralRows(container)
 	table.insert(container.rows, sizeRow)
 	totalHeight = totalHeight + ROW_H + ROW_GAP
 
-	local sizeCB = CreateFrame("CheckButton", nil, sizeRow, "UICheckButtonTemplate")
-	sizeCB:SetSize(22, 22)
+	local sizeCB = MakeCheckbox(sizeRow, 22)
 	sizeCB:SetPoint("TOPLEFT", sizeRow, "TOPLEFT", 0, 0)
 	sizeCB:SetChecked(not (XComp_DB.settings and XComp_DB.settings.autoSize == false))
-	sizeCB:SetScript("OnClick", function(btn)
+	sizeCB.OnToggle = function(btn)
 		XComp_DB.settings = XComp_DB.settings or {}
 		XComp_DB.settings.autoSize = btn:GetChecked() and true or false
 		if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 			XComp.UI:RefreshSections()
 		end
-	end)
+	end
 
 	local sizeName = sizeRow:CreateFontString(nil, "OVERLAY")
 	sizeName:SetFontObject(XComp.TitleFont)
@@ -502,15 +543,14 @@ function O:PopulateAppearanceRows(container)
 
 	-- Frameless mode: secondary opt-in, default remains the branded look.
 	local framelessRow = NextAppearRow(APPEAR_ROW_H)
-	local framelessCB = CreateFrame("CheckButton", nil, framelessRow, "UICheckButtonTemplate")
-	framelessCB:SetSize(22, 22)
+	local framelessCB = MakeCheckbox(framelessRow, 22)
 	framelessCB:SetPoint("TOPLEFT", framelessRow, "TOPLEFT", 0, 0)
 	framelessCB:SetChecked(XComp_DB.settings and XComp_DB.settings.frameless or false)
-	framelessCB:SetScript("OnClick", function(btn)
+	framelessCB.OnToggle = function(btn)
 		XComp_DB.settings = XComp_DB.settings or {}
 		XComp_DB.settings.frameless = btn:GetChecked() and true or false
 		if XComp.UI then XComp.UI:ApplyTheme() end
-	end)
+	end
 	local framelessName = framelessRow:CreateFontString(nil, "OVERLAY")
 	framelessName:SetFontObject(XComp.TitleFont)
 	framelessName:SetPoint("LEFT", framelessCB, "RIGHT", 6, 8)
@@ -593,6 +633,40 @@ function O:PopulateAppearanceRows(container)
 		XComp_DB.settings.scale = value
 		_G[self:GetName().."Text"]:SetText(string.format("Window Scale: %d%%", math.floor(value * 100 + 0.5)))
 		if XComp.UI then XComp.UI:ApplyTheme() end
+	end)
+
+	-- Idle opacity slider - how transparent the main tracker is while the
+	-- mouse ISN'T over it (it always snaps to full opacity on hover). Default
+	-- 0% (fully invisible until moused over), player-adjustable rather than
+	-- locked - explicit request 2026-08-12. Same per-container
+	-- instance-caching pattern as the other two sliders above.
+	local idleRow = NextAppearRow(50)
+	local idleSlider = container.idleAlphaSlider
+	if not idleSlider then
+		sliderNameCounter = sliderNameCounter + 1
+		local uniqueName = "XalsCompendiumIdleAlphaSlider" .. sliderNameCounter
+		idleSlider = CreateFrame("Slider", uniqueName, idleRow, "OptionsSliderTemplate")
+		_G[uniqueName.."Low"]:SetText("0%")
+		_G[uniqueName.."High"]:SetText("100%")
+		container.idleAlphaSlider = idleSlider
+	else
+		idleSlider:SetParent(idleRow)
+	end
+	idleSlider:ClearAllPoints()
+	idleSlider:SetPoint("TOPLEFT", idleRow, "TOPLEFT", 4, -14)
+	idleSlider:SetWidth(340)
+	idleSlider:SetMinMaxValues(0, 1)
+	idleSlider:SetValueStep(0.05)
+	idleSlider:SetObeyStepOnDrag(true)
+	local idleStart = (XComp_DB.settings and XComp_DB.settings.idleAlpha) or 0
+	idleSlider:SetValue(idleStart)
+	_G[idleSlider:GetName().."Text"]:SetText(string.format("Idle Opacity (not moused over): %d%%", math.floor(idleStart * 100 + 0.5)))
+	idleSlider:Show()
+	idleSlider:SetScript("OnValueChanged", function(self, value)
+		XComp_DB.settings = XComp_DB.settings or {}
+		XComp_DB.settings.idleAlpha = value
+		_G[self:GetName().."Text"]:SetText(string.format("Idle Opacity (not moused over): %d%%", math.floor(value * 100 + 0.5)))
+		if XComp.UI then XComp.UI:ApplyIdleAlpha() end
 	end)
 
 	container:SetHeight(math.max(totalHeight, 1))
@@ -847,16 +921,15 @@ function O:PopulateColorsRows(container)
 	table.insert(container.rows, shadowRow)
 	totalHeight = totalHeight + 26 + 4
 
-	local shadowCB = CreateFrame("CheckButton", nil, shadowRow, "UICheckButtonTemplate")
-	shadowCB:SetSize(22, 22)
+	local shadowCB = MakeCheckbox(shadowRow, 22)
 	shadowCB:SetPoint("TOPLEFT", shadowRow, "TOPLEFT", 0, 0)
 	local shadowEnabled = XComp_DB.text.shadowEnabled
 	if shadowEnabled == nil then shadowEnabled = true end
 	shadowCB:SetChecked(shadowEnabled)
-	shadowCB:SetScript("OnClick", function(btn)
+	shadowCB.OnToggle = function(btn)
 		XComp_DB.text.shadowEnabled = btn:GetChecked() and true or false
 		XComp.ApplyFontSettings()
-	end)
+	end
 	local shadowLabel = shadowRow:CreateFontString(nil, "OVERLAY")
 	shadowLabel:SetFontObject(XComp.BodyFont)
 	shadowLabel:SetPoint("LEFT", shadowCB, "RIGHT", 6, 8)
@@ -1013,7 +1086,7 @@ function O:PopulateCurrencyChecklistRows(container)
 			headerText:SetText(group.label)
 
 			local divider = headerRow:CreateTexture(nil, "ARTWORK")
-			divider:SetHeight(1)
+			divider:SetHeight(2)
 			divider:SetColorTexture(ar, ag, ab, 0.6)
 			divider:SetPoint("TOPLEFT", headerText, "BOTTOMLEFT", 0, -4)
 			divider:SetPoint("RIGHT", headerRow, "RIGHT", 0, 0)
@@ -1038,11 +1111,10 @@ function O:PopulateCurrencyChecklistRows(container)
 				cell:SetPoint("TOPLEFT", gridRow, "TOPLEFT", col * CURRENCY_COL_WIDTH, -gridRowIdx * 30)
 
 				local currencyID = entry.currencyID
-				local cb = CreateFrame("CheckButton", nil, cell, "UICheckButtonTemplate")
-				cb:SetSize(18, 18)
+				local cb = MakeCheckbox(cell, 18)
 				cb:SetPoint("LEFT", cell, "LEFT", 0, 0)
 				cb:SetChecked(tracked[currencyID] == true)
-				cb:SetScript("OnClick", function(btn)
+				cb.OnToggle = function(btn)
 					tracked[currencyID] = btn:GetChecked() and true or nil
 					if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 						XComp.UI:RefreshSections()
@@ -1053,7 +1125,7 @@ function O:PopulateCurrencyChecklistRows(container)
 					-- picks up this change on its own the next time it's
 					-- shown, so only the checklist itself needs a refresh.
 					self:PopulateCurrencyChecklistRows(container)
-				end)
+				end
 
 				local name = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 				name:SetPoint("LEFT", cb, "RIGHT", 4, 0)
@@ -1651,7 +1723,7 @@ function O:BuildAltsPanel()
 
 	local ar, ag, ab = XComp.GetAccentColor()
 	local vDivider1 = panel:CreateTexture(nil, "ARTWORK")
-	vDivider1:SetWidth(1)
+	vDivider1:SetWidth(2)
 	vDivider1:SetColorTexture(ar, ag, ab, 1)
 	vDivider1:SetPoint("TOPLEFT", charSidebar, "TOPRIGHT", 10, 0)
 	vDivider1:SetPoint("BOTTOMLEFT", charSidebar, "BOTTOMRIGHT", 10, 0)
@@ -1662,7 +1734,7 @@ function O:BuildAltsPanel()
 	sectionSidebar:SetWidth(100)
 
 	local vDivider2 = panel:CreateTexture(nil, "ARTWORK")
-	vDivider2:SetWidth(1)
+	vDivider2:SetWidth(2)
 	vDivider2:SetColorTexture(ar, ag, ab, 1)
 	vDivider2:SetPoint("TOPLEFT", sectionSidebar, "TOPRIGHT", 10, 0)
 	vDivider2:SetPoint("BOTTOMLEFT", sectionSidebar, "BOTTOMRIGHT", 10, 0)
@@ -1974,7 +2046,7 @@ function O:BuildStandaloneWindow()
 	sidebar:SetWidth(100)
 
 	local vDivider = f:CreateTexture(nil, "ARTWORK")
-	vDivider:SetWidth(1)
+	vDivider:SetWidth(2)
 	local var, vag, vab = XComp.GetAccentColor()
 	vDivider:SetColorTexture(var, vag, vab, 1)
 	vDivider:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 10, 0)
