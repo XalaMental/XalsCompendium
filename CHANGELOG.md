@@ -1,5 +1,29 @@
 # Xal's Compendium - Changelog
 
+## 1.0.7 - August 12, 2026
+
+---
+
+This one's mostly under the hood in terms of what changes for you day to day, but it's a solid step forward. The whole addon now matches the branded look I've been rolling out across all my addons - same gold accents, same clean button and checkbox style - instead of some of it still carrying the old default look. On top of that, I added a couple things people have wanted: the tracker window now fades out of sight when you're not actively looking at it, so it's not just sitting there taking up space, and you can hover over it to bring it right back. There's also a new minimize button that shrinks it down to a tiny bar showing what you've still got left today and this week, if you want it out of the way without closing it entirely. Small stuff, but it should make the addon feel a lot less in-your-face when you're not using it.
+
+### 🆕 New
+- **Fade when idle** - the tracker window fades to fully invisible when you're not moused over it, and snaps back to full opacity the moment you hover it. How transparent it goes while idle is adjustable in Appearance settings (defaults to fully invisible).
+- **Minimize button** - collapses the tracker into a small "D / W" bar showing how many Daily and Weekly items you've got left, so it can stay tucked away without closing it entirely.
+- **What's New splash** - now pops up automatically the first time you log in after an update, same as Xal's other addons.
+
+### ⚙️ Under the hood
+- Buttons, checkboxes, and divider lines across the whole addon now match the shared Xal's brand look (accent-gold borders, flat style, thicker lines) instead of Blizzard's default grey/native style.
+- Background color darkened slightly to match the current brand standard.
+
+## 1.0.6 - August 12, 2026
+
+---
+
+I think I finally got this thing to work. I've been chipping away at a way to automate pulling in real daily and weekly quest data, and this is the first version where it's actually showing up - real quests, not a placeholder sitting on your addon list looking pretty and doing nothing. Fingers crossed I got it working correctly, but I can only test so much on my own. If you're running this, please poke at it and let me know if anything looks off - you all catching the bugs I can't see is genuinely what's going to turn this into something I'm proud of. Thanks for helping me get there.
+
+### 🆕 New
+- **First real catalog content** - 8 real, current Weekly quests now show up under Current -> Weekly -> Weekly Events, instead of test placeholders or an empty list.
+
 ## 1.0.5 - August 11, 2026
 
 ---
