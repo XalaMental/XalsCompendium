@@ -88,6 +88,39 @@ function U:CreateMainFrame()
 	XComp.ApplyTextShadow(title)
 	f.title = title
 
+	-- Minimize button - collapses the tracker down to a small "D: x  W: y"
+	-- pill in the same spot, for tucking it out of the way (SilverDragon's
+	-- minimized bar was the explicit reference, 2026-08-12). Text/link style,
+	-- same convention as XComp.MakeCloseButton.
+	local minimizeBtn = CreateFrame("Button", nil, f)
+	minimizeBtn:SetSize(20, 20)
+	minimizeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -8)
+	local minimizeLabel = minimizeBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	minimizeLabel:SetPoint("CENTER")
+	minimizeLabel:SetText("-")
+	do
+		local mr, mg, mb = XComp.GetAccentColor()
+		minimizeLabel:SetTextColor(mr, mg, mb, 1)
+	end
+	minimizeBtn.label = minimizeLabel
+	minimizeBtn:SetScript("OnEnter", function() minimizeLabel:SetTextColor(1, 1, 1, 1) end)
+	minimizeBtn:SetScript("OnLeave", function()
+		local ar2, ag2, ab2 = XComp.GetAccentColor()
+		minimizeLabel:SetTextColor(ar2, ag2, ab2, 1)
+	end)
+	minimizeBtn:SetScript("OnClick", function() U:ToggleMinimized() end)
+	f.minimizeBtn = minimizeBtn
+
+	-- Minimized-state label ("D: x   W: y") - only shown while minimized,
+	-- replaces the whole scroll/content area.
+	local minimizedLabel = f:CreateFontString(nil, "OVERLAY")
+	minimizedLabel:SetFontObject(XComp.TitleFont)
+	minimizedLabel:SetPoint("LEFT", f, "LEFT", 16, 0)
+	minimizedLabel:SetJustifyH("LEFT")
+	XComp.ApplyTextShadow(minimizedLabel)
+	minimizedLabel:Hide()
+	f.minimizedLabel = minimizedLabel
+
 	-- Overall total, since sections start collapsed by default - this is
 	-- the only at-a-glance progress view without expanding anything.
 	local overall = f:CreateFontString(nil, "OVERLAY")
@@ -96,22 +129,23 @@ function U:CreateMainFrame()
 	f.overallLabel = overall
 
 	-- Hide-completed filter toggle.
-	local filterCB = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
-	filterCB:SetSize(18, 18)
+	local filterCB = XComp.MakeCheckbox(f, 18)
 	filterCB:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -46)
 	filterCB:SetChecked(XComp_DB.settings and XComp_DB.settings.hideCompleted or false)
-	filterCB:SetScript("OnClick", function(self)
+	filterCB.OnToggle = function(self)
 		XComp_DB.settings = XComp_DB.settings or {}
 		XComp_DB.settings.hideCompleted = self:GetChecked() and true or false
 		U:RefreshSections()
-	end)
+	end
 	local filterLbl = f:CreateFontString(nil, "OVERLAY")
 	filterLbl:SetFontObject(XComp.BodyFont)
 	filterLbl:SetPoint("LEFT", filterCB, "RIGHT", 2, 0)
 	filterLbl:SetText("Hide completed")
+	f.filterCB = filterCB
+	f.filterLbl = filterLbl
 
 	local divider = f:CreateTexture(nil, "ARTWORK")
-	divider:SetHeight(1)
+	divider:SetHeight(2)
 	divider:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -68)
 	divider:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -68)
 	f.divider = divider
@@ -251,11 +285,86 @@ function U:CreateMainFrame()
 	local closeBtn = XComp.MakeCloseButton(f)
 	closeBtn:ClearAllPoints()
 	closeBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -24, 8)
+	f.closeBtn = closeBtn
+
+	-- Fade-to-transparent when the mouse isn't over the window (explicit
+	-- request 2026-08-12) - always snaps to full opacity on hover; the
+	-- non-hover target opacity is the player-adjustable Idle Opacity slider
+	-- (Options.lua Appearance page), default 0 (fully invisible).
+	f:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
+	f:SetScript("OnLeave", function(self)
+		U:ApplyIdleAlpha()
+	end)
 
 	f:Hide()
 	self.mainFrame = f
 	self:ApplyTheme()
+	self:ApplyIdleAlpha()
+	self:ApplyMinimizedState()
 	return f
+end
+
+-- Sets the window's alpha to fully opaque if the mouse is currently over it,
+-- otherwise to the player's configured Idle Opacity (default 0). Callable
+-- both from the OnLeave script above and live from the settings slider.
+function U:ApplyIdleAlpha()
+	local f = self.mainFrame
+	if not f then return end
+	if f:IsMouseOver() then
+		f:SetAlpha(1)
+	else
+		local idle = (XComp_DB.settings and XComp_DB.settings.idleAlpha) or 0
+		f:SetAlpha(idle)
+	end
+end
+
+-- Collapses the tracker down to a small "D: x   W: y" pill in the same spot
+-- (minimize button toggles this) - everything except the minimize/close
+-- buttons and the D/W label hides, and the window shrinks to fit. Persisted
+-- in XComp_DB.settings.minimized so it stays minimized across reloads.
+function U:ApplyMinimizedState()
+	local f = self.mainFrame
+	if not f then return end
+	local minimized = XComp_DB.settings and XComp_DB.settings.minimized
+
+	local fullElements = {
+		f.title, f.overallLabel, f.filterCB, f.filterLbl, f.divider,
+		f.vaultBtn, f.refreshBtn, f.ilvlText, f.scrollFrame, f.resizeGrip, f.closeBtn,
+	}
+	for _, el in ipairs(fullElements) do
+		if el then
+			if minimized then el:Hide() else el:Show() end
+		end
+	end
+
+	if minimized then
+		local dailyLeft, weeklyLeft = XComp.Data:GetDailyWeeklyLeft()
+		f.minimizedLabel:SetText(string.format("D: %d   W: %d", dailyLeft, weeklyLeft))
+		f.minimizedLabel:Show()
+		f.minimizeBtn.label:SetText("+")
+		-- Only actually resize on the transition INTO minimized, not on
+		-- every RefreshSections call while already minimized - avoids
+		-- fighting anything else that might touch the frame's size.
+		if not f._minimized then
+			f:SetSize(190, 36)
+		end
+	else
+		f.minimizedLabel:Hide()
+		f.minimizeBtn.label:SetText("-")
+		-- Same idea: only resize back on the transition OUT of minimized -
+		-- doing this unconditionally every refresh would fight both the
+		-- corner-drag resize and the auto-size-to-content logic below.
+		if f._minimized then
+			f:SetSize(FRAME_W, FRAME_H)
+		end
+	end
+	f._minimized = minimized
+end
+
+function U:ToggleMinimized()
+	XComp_DB.settings = XComp_DB.settings or {}
+	XComp_DB.settings.minimized = not XComp_DB.settings.minimized
+	self:ApplyMinimizedState()
 end
 
 -- Re-applies frameless mode, background transparency, accent color, and
@@ -427,6 +536,7 @@ function U:Toggle()
 	else
 		f:Show()
 		self:RefreshSections()
+		self:ApplyIdleAlpha()
 	end
 end
 
@@ -519,8 +629,7 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	row:SetHeight(ROW_H)
 	row:EnableMouse(true)
 
-	local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-	cb:SetSize(18, 18)
+	local cb = XComp.MakeCheckbox(row, 18)
 	cb:SetPoint("LEFT", row, "LEFT", indent, 0)
 
 	local label = row:CreateFontString(nil, "OVERLAY")
@@ -571,14 +680,14 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 		label:SetPoint("RIGHT", mapBtn, "LEFT", -4, 0)
 	end
 
-	cb:SetScript("OnClick", function(self)
+	cb.OnToggle = function(self)
 		XComp.Data:SetManualOverride(item.uid, self:GetChecked() and true or false, resetEpoch)
 		-- Without this, the checkbox's own checked state flips (native
 		-- behavior) but nothing else does - counts, smart sorting, and the
 		-- overall total all stay stale until something unrelated happens to
 		-- trigger a full refresh. A checkbox click needs to redraw the list.
 		XComp.UI:RefreshSections()
-	end)
+	end
 
 	-- CheckButton only registers left-click by default, so a right-click
 	-- anywhere on the row (including over the checkbox) passes through to
@@ -827,6 +936,7 @@ function U:RefreshSections()
 	end
 
 	f.overallLabel:SetText(string.format("%d / %d complete", overallCompleted, overallTotal))
+	self:ApplyMinimizedState()
 
 	-- Scroll child height must always match actual content, regardless of
 	-- auto-size settings - this is what makes overflow physically
@@ -841,7 +951,7 @@ function U:RefreshSections()
 	-- escape hatch rather than being stuck with it. Content beyond the cap
 	-- simply scrolls within the window instead of growing it further.
 	local autoSize = not (XComp_DB.settings and XComp_DB.settings.autoSize == false)
-	if autoSize then
+	if autoSize and not (XComp_DB.settings and XComp_DB.settings.minimized) then
 		local HEADER_AND_FOOTER = 148 -- top offset (68) + icon row (24) + icon row gap (8) + content gap (8) + bottom padding (40)
 		local minH, maxH = 200, 800
 		local targetH = HEADER_AND_FOOTER + contentHeight
