@@ -78,6 +78,35 @@ D.Catalog = {
 	},
 }
 
+-- First real seed data (2026-08-12) - Current -> Weekly -> Weekly Events.
+-- Sourced by cross-referencing the local weekly-checker tool's real
+-- Blizzard API data against Icy Veins' current weekly to-do list, then
+-- hand-verified: 3 "Void Assaults" quests (Blizzard's own category field)
+-- matching Icy Veins' described rotating Void Strikes system, plus 5
+-- "Dungeon" category quests confirmed by the user as the weekly rotating
+-- dungeon-of-the-week quest board (picked up from NPCs by the bank) - a
+-- real, recurring weekly system, not one-time content, despite sharing a
+-- name with the dungeon itself.
+do
+	local currentTier = D.Catalog.tiers[1]
+	local weeklyType = currentTier.types[2]
+	local weeklyEvents = weeklyType.categories[3]
+
+	local seedItems = {
+		{ uid = "quest-96049", name = "Stalkers of the Stars", questID = 96049, children = {} },
+		{ uid = "quest-96080", name = "Void Strike", questID = 96080, children = {} },
+		{ uid = "quest-96703", name = "Veterans of the Great Dark", questID = 96703, children = {} },
+		{ uid = "quest-93751", name = "Windrunner Spire", questID = 93751, children = {} },
+		{ uid = "quest-93753", name = "Magisters' Terrace", questID = 93753, children = {} },
+		{ uid = "quest-93754", name = "Maisara Caverns", questID = 93754, children = {} },
+		{ uid = "quest-93758", name = "Nexus-Point Xenas", questID = 93758, children = {} },
+		{ uid = "quest-98220", name = "Altar of Fangs", questID = 98220, children = {} },
+	}
+	for _, item in ipairs(seedItems) do
+		table.insert(weeklyEvents.items, item)
+	end
+end
+
 -- Catalog item shape (for reference - the extraction pipeline fills these in):
 -- {
 --     uid = "unique-stable-id",       -- ours, stable across patches even if questID changes
@@ -304,6 +333,29 @@ function D:CountTier(tier)
 		end
 	end
 	return completed, total
+end
+
+-- Daily/Weekly items still left across BOTH tiers (Current + Legacy),
+-- matching type key "daily"/"weekly" regardless of which tier they're under
+-- - same "type is shared across tiers" rule CountTier already applies. Used
+-- by the minimized tracker bar's "D/W" counts.
+function D:GetDailyWeeklyLeft()
+	local dailyCompleted, dailyTotal, weeklyCompleted, weeklyTotal = 0, 0, 0, 0
+	for _, tier in ipairs(self.Catalog.tiers) do
+		for _, typeSection in ipairs(tier.types) do
+			if XComp.Options:IsTypeEnabled(typeSection.key) then
+				local c, t = self:CountType(typeSection)
+				if typeSection.key == "daily" then
+					dailyCompleted = dailyCompleted + c
+					dailyTotal = dailyTotal + t
+				elseif typeSection.key == "weekly" then
+					weeklyCompleted = weeklyCompleted + c
+					weeklyTotal = weeklyTotal + t
+				end
+			end
+		end
+	end
+	return dailyTotal - dailyCompleted, weeklyTotal - weeklyCompleted
 end
 
 -------------------------------------------------
