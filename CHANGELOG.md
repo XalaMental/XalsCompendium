@@ -1,5 +1,14 @@
 # Xal's Compendium - Changelog
 
+## 1.0.4 - August 11, 2026
+
+---
+
+Fixed the real reason the quest catalog updater was still finding zero real quests even after last update's fix.
+
+### 🐛 Fixed
+- The updater's login step to Blizzard's servers wasn't actually being used correctly, so every single quest lookup failed regardless of which quest it was checking. It's fixed now and should actually find real quest data on its next run.
+
 ## 1.0.3 - August 10, 2026
 
 ---

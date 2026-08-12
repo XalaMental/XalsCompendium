@@ -165,8 +165,16 @@ def fetch_quest_name(quest_id, token):
     it (a valid outcome, not an error - some client-side IDs have no public
     API record, e.g. removed/internal-only quests)."""
     def _do():
-        url = f"{QUEST_API_URL.format(id=quest_id)}?namespace={NAMESPACE}&locale={LOCALE}&access_token={token}"
-        with urllib.request.urlopen(url, timeout=15) as resp:
+        # Bearer header, NOT an access_token query param - confirmed via a
+        # real working client library (FuzzyStatic/blizzard's Go source)
+        # that Blizzard's API expects the token this way. The query-param
+        # form was the actual bug behind every single lookup 404ing
+        # regardless of which quest ID was asked about (tested both oldest
+        # and newest quests - same 0/2000 result either way, which is what
+        # exposed this wasn't about which quests, it was the auth method).
+        url = f"{QUEST_API_URL.format(id=quest_id)}?namespace={NAMESPACE}&locale={LOCALE}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
     try:
