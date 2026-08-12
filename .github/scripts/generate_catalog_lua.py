@@ -51,7 +51,11 @@ def main():
     # Sorted by ID for stable, diffable output across regenerations.
     for quest_id in sorted(catalog.keys(), key=int):
         entry = catalog[quest_id]
-        name = entry.get("name", "")
+        # entry is now the FULL raw API response (extract_quests.py stores
+        # everything, not just name, so future categorization logic has
+        # real field data to work with) - the actual title field name
+        # wasn't documented anywhere reliable, so check both possibilities.
+        name = entry.get("title") or entry.get("name") or ""
         # Escape quotes/backslashes so a quest name can never break the Lua string.
         safe_name = name.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(
