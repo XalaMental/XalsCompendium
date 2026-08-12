@@ -160,10 +160,19 @@ def get_access_token():
     return payload.get("access_token")
 
 
-def fetch_quest_name(quest_id, token):
-    """Returns the quest's real name, or None if the API has no record for
-    it (a valid outcome, not an error - some client-side IDs have no public
-    API record, e.g. removed/internal-only quests)."""
+def fetch_quest_data(quest_id, token):
+    """Returns the quest's full raw API response (a dict), or None if the
+    API has no record for it (a valid outcome, not an error - some client-
+    side IDs have no public API record, e.g. removed/internal-only quests).
+
+    Deliberately kept as the FULL payload, not just the name - this addon
+    still needs to sort quests into Daily/Weekly tiers and content
+    categories, and no reliable documented example of this endpoint's full
+    field set could be found (checked Blizzard's own docs, Postman
+    collections, and community client libraries - none had a real captured
+    response body). Capturing everything now means the next real run gives
+    genuine field data to build automatic categorization from, instead of
+    guessing field names in advance."""
     def _do():
         # Bearer header, NOT an access_token query param - confirmed via a
         # real working client library (FuzzyStatic/blizzard's Go source)
@@ -178,12 +187,11 @@ def fetch_quest_name(quest_id, token):
             return json.loads(resp.read().decode("utf-8"))
 
     try:
-        payload = with_retries(f"Looking up quest {quest_id}", _do)
+        return with_retries(f"Looking up quest {quest_id}", _do)
     except urllib.error.HTTPError as err:
         if err.code == 404:
             return None
         raise
-    return payload.get("title") or payload.get("name")
 
 
 def main():
@@ -225,9 +233,9 @@ def main():
     looked_up, skipped = 0, 0
 
     for i, quest_id in enumerate(batch, start=1):
-        name = fetch_quest_name(quest_id, token)
-        if name:
-            catalog[str(quest_id)] = {"name": name}
+        data = fetch_quest_data(quest_id, token)
+        if data:
+            catalog[str(quest_id)] = data
             looked_up += 1
         else:
             skipped += 1
