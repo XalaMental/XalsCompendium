@@ -27,7 +27,7 @@ end
 -- from the transparency slider (alpha only). Single source of truth so the
 -- main tracker AND both settings windows stay visually consistent with each
 -- other instead of only one of them picking up a custom background.
-XComp.DEFAULT_BG = { 0.07, 0.07, 0.07 }
+XComp.DEFAULT_BG = { 0.035, 0.035, 0.035 }
 function XComp.GetBgColor()
 	local c = XComp_DB.bgColor
 	if c then return c[1], c[2], c[3] end
@@ -154,6 +154,77 @@ function XComp.MakeCloseButton(parent, onClick)
 	return btn
 end
 
+-- Hand-drawn checkbox - Xal's shared brand checkbox (locked in 2026-08-12).
+-- Blizzard's native UICheckButtonTemplate was confirmed rendering with its
+-- bottom border missing entirely in-game, so every checkbox in the addon
+-- uses this instead: same pixel-snapped 4-texture border technique as
+-- MakeFlatButton (Options.lua), sourced from the addon's own live accent
+-- color. Shared here (not duplicated in Options.lua) so UI.lua's checkboxes
+-- can use it too. API differs slightly from a native CheckButton: set
+-- cb.OnToggle instead of :SetScript("OnClick", ...) - the checked state is
+-- already flipped by the time OnToggle runs, matching the native behavior
+-- where GetChecked() reflects the NEW state inside OnClick.
+function XComp.MakeCheckbox(parent, size)
+	size = size or 22
+	local cb = CreateFrame("Button", nil, parent)
+	PixelUtil.SetSize(cb, size, size)
+
+	local bg = cb:CreateTexture(nil, "BACKGROUND")
+	bg:SetAllPoints()
+	bg:SetColorTexture(0.1, 0.1, 0.1, 0.6)
+
+	local ar, ag, ab = XComp.GetAccentColor()
+
+	local borderTop = cb:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderTop, "TOPLEFT", cb, "TOPLEFT", 0, 0)
+	PixelUtil.SetPoint(borderTop, "TOPRIGHT", cb, "TOPRIGHT", 0, 0)
+	PixelUtil.SetHeight(borderTop, 2)
+	borderTop:SetColorTexture(ar, ag, ab, 1)
+
+	local borderBottom = cb:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderBottom, "BOTTOMLEFT", cb, "BOTTOMLEFT", 0, 0)
+	PixelUtil.SetPoint(borderBottom, "BOTTOMRIGHT", cb, "BOTTOMRIGHT", 0, 0)
+	PixelUtil.SetHeight(borderBottom, 2)
+	borderBottom:SetColorTexture(ar, ag, ab, 1)
+
+	local borderLeft = cb:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderLeft, "TOPLEFT", cb, "TOPLEFT", 0, 0)
+	PixelUtil.SetPoint(borderLeft, "BOTTOMLEFT", cb, "BOTTOMLEFT", 0, 0)
+	PixelUtil.SetWidth(borderLeft, 2)
+	borderLeft:SetColorTexture(ar, ag, ab, 1)
+
+	local borderRight = cb:CreateTexture(nil, "ARTWORK")
+	PixelUtil.SetPoint(borderRight, "TOPRIGHT", cb, "TOPRIGHT", 0, 0)
+	PixelUtil.SetPoint(borderRight, "BOTTOMRIGHT", cb, "BOTTOMRIGHT", 0, 0)
+	PixelUtil.SetWidth(borderRight, 2)
+	borderRight:SetColorTexture(ar, ag, ab, 1)
+
+	local check = cb:CreateFontString(nil, "OVERLAY")
+	check:SetFont("Fonts\\FRIZQT__.TTF", size - 2, "OUTLINE")
+	check:SetText("X")
+	check:SetTextColor(ar, ag, ab, 1)
+	check:SetPoint("CENTER", cb, "CENTER", 0, 0)
+	check:Hide()
+
+	cb.checked = false
+	function cb:SetChecked(state)
+		self.checked = state and true or false
+		if self.checked then check:Show() else check:Hide() end
+	end
+	function cb:GetChecked()
+		return self.checked
+	end
+
+	cb:SetScript("OnEnter", function() bg:SetColorTexture(0.18, 0.18, 0.18, 0.75) end)
+	cb:SetScript("OnLeave", function() bg:SetColorTexture(0.1, 0.1, 0.1, 0.6) end)
+	cb:SetScript("OnClick", function(self)
+		self:SetChecked(not self.checked)
+		if self.OnToggle then self.OnToggle(self) end
+	end)
+
+	return cb
+end
+
 -------------------------------------------------
 -- Minimap button (LibDataBroker + LibDBIcon)
 -------------------------------------------------
@@ -210,6 +281,7 @@ f:SetScript("OnEvent", function(_, event, ...)
 		-- still incomplete AND it hasn't already reminded this cycle.
 		XComp.Data:CheckMaintenanceReminder()
 		C_Timer.NewTicker(1800, function() XComp.Data:CheckMaintenanceReminder() end)
+			if XComp.WhatsNew then XComp.WhatsNew:CheckAndShow() end
 	elseif event == "QUEST_TURNED_IN" then
 		-- Completion popup while the window's closed (build-plan item 10) -
 		-- match the turned-in quest against the catalog; if it's a tracked
