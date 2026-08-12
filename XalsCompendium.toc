@@ -17,10 +17,13 @@ Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
 Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 
-# Load order: Core (creates the shared XComp table) → Data → generated
+# Load order: Core (creates the shared XComp table) → BrandStyle (splash-only
+# shared brand colors/helpers) → WhatsNew (update splash) → Data → generated
 # catalog data (real quests from the extraction pipeline, if any exist yet -
 # see GeneratedCatalog.lua) → UI files
 Core.lua
+BrandStyle.lua
+WhatsNew.lua
 Data.lua
 GeneratedCatalog.lua
 UI.lua
