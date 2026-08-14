@@ -82,7 +82,7 @@ function U:CreateMainFrame()
 	f.resizeGrip = resizeGrip
 
 	local title = f:CreateFontString(nil, "OVERLAY")
-	title:SetFont("Fonts\\MORPHEUS.TTF", 20, "")
+	title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 20, "")
 	title:SetPoint("TOP", f, "TOP", 0, -16)
 	title:SetText("Xal's Compendium")
 	XComp.ApplyTextShadow(title)
@@ -457,8 +457,11 @@ function U:ShowDiagnostics()
 		f = CreateFrame("Frame", "XalsCompendiumDiagFrame", UIParent, "BackdropTemplate")
 		tinsert(UISpecialFrames, "XalsCompendiumDiagFrame")
 		f:SetSize(560, 440)
-		f:SetPoint("CENTER")
+		-- Staggered off dead-center - see the "Default window position"
+		-- rule in the shared brand-style memory.
+		f:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
 		f:SetFrameStrata("DIALOG")
+		f:SetToplevel(true)
 		f:SetBackdrop({
 			bgFile = "Interface\\Buttons\\WHITE8x8",
 			edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -476,7 +479,7 @@ function U:ShowDiagnostics()
 		f:SetScript("OnDragStop", f.StopMovingOrSizing)
 
 		local title = f:CreateFontString(nil, "OVERLAY")
-		title:SetFont("Fonts\\MORPHEUS.TTF", 18, "")
+		title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 18, "")
 		title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
 		title:SetTextColor(ar, ag, ab, 1)
 		title:SetText("Xal's Compendium - Diagnostics")
@@ -525,6 +528,88 @@ function U:ShowDiagnostics()
 	-- SetFocus() so Ctrl+A/Ctrl+C works immediately - HighlightText() alone
 	-- visually selects the text but doesn't give the box keyboard focus, so
 	-- copying required an extra manual click first without this.
+	f.editBox:SetFocus()
+	f.editBox:HighlightText()
+end
+
+-- Export window for auto-detected quests (2026-08-12 follow-up) - identical
+-- copy-box pattern to ShowDiagnostics above, own separate frame so both can
+-- be open independently. This is the actual bridge Jason asked for: the
+-- Custom-category auto-add only lives on his own account, so this report is
+-- what he copies over so the finds can get sorted into the REAL shared
+-- catalog and shipped to everyone in a real release.
+function U:ShowUntrackedExport()
+	local lines = XComp.Data:GetUntrackedReport()
+	local text = table.concat(lines, "\n")
+
+	local f = self.untrackedFrame
+	if not f then
+		f = CreateFrame("Frame", "XalsCompendiumUntrackedFrame", UIParent, "BackdropTemplate")
+		tinsert(UISpecialFrames, "XalsCompendiumUntrackedFrame")
+		f:SetSize(560, 440)
+		f:SetPoint("CENTER", UIParent, "CENTER", 0, 200)
+		f:SetFrameStrata("DIALOG")
+		f:SetToplevel(true)
+		f:SetBackdrop({
+			bgFile = "Interface\\Buttons\\WHITE8x8",
+			edgeFile = "Interface\\Buttons\\WHITE8x8",
+			edgeSize = 1,
+		})
+		local br, bg, bb = XComp.GetBgColor()
+		f:SetBackdropColor(br, bg, bb, 0.97)
+		local ar, ag, ab = XComp.GetAccentColor()
+		f:SetBackdropBorderColor(ar, ag, ab, 1)
+
+		f:SetMovable(true)
+		f:EnableMouse(true)
+		f:RegisterForDrag("LeftButton")
+		f:SetScript("OnDragStart", f.StartMoving)
+		f:SetScript("OnDragStop", f.StopMovingOrSizing)
+
+		local title = f:CreateFontString(nil, "OVERLAY")
+		title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 18, "")
+		title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
+		title:SetTextColor(ar, ag, ab, 1)
+		title:SetText("Xal's Compendium - Auto-Detected Quests")
+		XComp.ApplyTextShadow(title)
+
+		local hint = f:CreateFontString(nil, "OVERLAY")
+		hint:SetFontObject(XComp.BodyFont)
+		hint:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+		hint:SetPoint("RIGHT", f, "RIGHT", -16, 0)
+		hint:SetJustifyH("LEFT")
+		hint:SetText("Click inside, Ctrl+A then Ctrl+C to copy - send this list over to get them added to the real catalog.")
+
+		local scrollFrame = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+		scrollFrame:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -10)
+		scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 40)
+
+		local editBox = CreateFrame("EditBox", nil, scrollFrame)
+		editBox:SetMultiLine(true)
+		editBox:SetFontObject(ChatFontNormal)
+		editBox:SetAutoFocus(false)
+		editBox:SetWidth(scrollFrame:GetWidth())
+		editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+		scrollFrame:SetScrollChild(editBox)
+		scrollFrame:SetScript("OnSizeChanged", function(self, width) editBox:SetWidth(width) end)
+		scrollFrame:EnableMouseWheel(true)
+		scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+			local maxScroll = math.max(editBox:GetHeight() - self:GetHeight(), 0)
+			local newScroll = self:GetVerticalScroll() - delta * 40
+			newScroll = math.max(0, math.min(newScroll, maxScroll))
+			self:SetVerticalScroll(newScroll)
+		end)
+		f.editBox = editBox
+
+		XComp.MakeCloseButton(f)
+
+		f:Hide()
+		self.untrackedFrame = f
+	end
+
+	f.editBox:SetText(text)
+	f.editBox:SetHeight(math.max(#lines * 14, 300))
+	f:Show()
 	f.editBox:SetFocus()
 	f.editBox:HighlightText()
 end
