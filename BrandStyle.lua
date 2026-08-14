@@ -44,14 +44,16 @@ function Brand.FS(parent, text, fontPath, size, flags, r, g, b)
     return fs
 end
 
--- ── Title()  ─ the branded Morpheus-font title treatment, with its
--- drop-shadow layer, in one call. Returns the visible (front) fontstring.
+-- ── Title()  ─ the branded title treatment (Simply Sans Bold, this addon's
+-- own bundled font - Morpheus retired 2026-08-13, matching Quest Compass),
+-- with its drop-shadow layer, in one call. Returns the visible (front)
+-- fontstring.
 function Brand.Title(parent, text, size, anchorPoint, relTo, relPoint, x, y)
-    local shadow = Brand.FS(parent, text, "Fonts\\MORPHEUS.TTF", size, "OUTLINE", 0, 0, 0)
+    local shadow = Brand.FS(parent, text, "Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", size, "OUTLINE", 0, 0, 0)
     PixelUtil.SetPoint(shadow, anchorPoint, relTo, relPoint, x + 4, y - 4)
     shadow:SetJustifyH("CENTER")
 
-    local title = Brand.FS(parent, text, "Fonts\\MORPHEUS.TTF", size, "OUTLINE",
+    local title = Brand.FS(parent, text, "Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", size, "OUTLINE",
         Brand.ACCENT[1], Brand.ACCENT[2], Brand.ACCENT[3])
     PixelUtil.SetPoint(title, anchorPoint, relTo, relPoint, x, y)
     title:SetJustifyH("CENTER")
