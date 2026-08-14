@@ -9,6 +9,17 @@ XComp = XComp or {}
 XComp_DB = XComp_DB or {}
 XComp_CharDB = XComp_CharDB or {}
 
+-- Hidden dev-only switch (2026-08-12) - the untracked-quest auto-detection
+-- system (Data.lua/Core.lua/Options.lua/UI.lua) is OFF by default for
+-- every install, including real CurseForge downloads. It only turns on via
+-- this undocumented slash command - nothing in the settings UI, nothing in
+-- the changelog references it. Explicit requirement: this is Xal's own
+-- personal collection tool riding inside the same addon, not a player-facing
+-- feature - it must do nothing at all unless deliberately switched on.
+function XComp.IsDevMode()
+	return XComp_DB.devMode == true
+end
+
 -------------------------------------------------
 -- Shared theme
 -------------------------------------------------
@@ -199,10 +210,16 @@ function XComp.MakeCheckbox(parent, size)
 	PixelUtil.SetWidth(borderRight, 2)
 	borderRight:SetColorTexture(ar, ag, ab, 1)
 
-	local check = cb:CreateFontString(nil, "OVERLAY")
-	check:SetFont("Fonts\\FRIZQT__.TTF", size - 2, "OUTLINE")
-	check:SetText("X")
-	check:SetTextColor(ar, ag, ab, 1)
+	-- Texture, not a FontString "X" - a font glyph's CENTER anchor centers
+	-- against the font's full line-height box (ascender/descender padding
+	-- included), not the glyph's actual ink, so it visually drifts off-true-
+	-- center. Blizzard's own checkmark texture centers exactly where told,
+	-- no font-metrics guesswork - confirmed 2026-08-13 on Quest Compass,
+	-- now the standard everywhere.
+	local check = cb:CreateTexture(nil, "OVERLAY")
+	check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+	check:SetVertexColor(ar, ag, ab, 1)
+	PixelUtil.SetSize(check, size - 4, size - 4)
 	check:SetPoint("CENTER", cb, "CENTER", 0, 0)
 	check:Hide()
 
@@ -232,11 +249,17 @@ end
 -- settings window specifically (not the Blizzard-native one) - per the
 -- locked requirement that the standalone window is the default/primary
 -- settings menu.
+-- Minimap icon art - own custom silhouette (parchment scroll + quill), not
+-- Blizzard's circular mask. New filename on every revision (WoW's client
+-- can cache a texture path even across /reload) - bump to _v2, _v3, etc.
+-- if this ever needs a redo, don't overwrite this file in place.
+local MINIMAP_ICON = "Interface\\AddOns\\XalsCompendium\\Textures\\MinimapIcon_v1.png"
+
 local function RegisterMinimapButton()
 	local ldb = LibStub("LibDataBroker-1.1"):NewDataObject("XalsCompendium", {
 		type = "launcher",
 		text = "Xal's Compendium",
-		icon = "Interface\\AddOns\\XalsCompendium\\Icon.png",
+		icon = MINIMAP_ICON,
 		OnClick = function(_, button)
 			if button == "RightButton" then
 				XComp.Options:ToggleStandalone()
@@ -252,12 +275,21 @@ local function RegisterMinimapButton()
 	})
 
 	XComp_DB.minimap = XComp_DB.minimap or { hide = false }
-	LibStub("LibDBIcon-1.0"):Register("XalsCompendium", ldb, XComp_DB.minimap)
+	local icon = LibStub("LibDBIcon-1.0")
+	icon:Register("XalsCompendium", ldb, XComp_DB.minimap)
+
+	-- Full custom shape (not Blizzard's circular mask) - confirmed technique,
+	-- see project_addon_visual_brand.md's "Minimap icon technique" section.
+	icon:SetButtonSize("XalsCompendium", 34)
+	icon:RemoveButtonBorder("XalsCompendium")
+	icon:RemoveButtonBackground("XalsCompendium")
+	icon:SetButtonIcon("XalsCompendium", MINIMAP_ICON, 34, "CENTER", 0, 0)
 end
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("QUEST_TURNED_IN")
+f:RegisterEvent("QUEST_ACCEPTED")
 f:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
 f:SetScript("OnEvent", function(_, event, ...)
 	if event == "ADDON_LOADED" then
@@ -281,7 +313,39 @@ f:SetScript("OnEvent", function(_, event, ...)
 		-- still incomplete AND it hasn't already reminded this cycle.
 		XComp.Data:CheckMaintenanceReminder()
 		C_Timer.NewTicker(1800, function() XComp.Data:CheckMaintenanceReminder() end)
-			if XComp.WhatsNew then XComp.WhatsNew:CheckAndShow() end
+		if XComp.WhatsNew then XComp.WhatsNew:CheckAndShow() end
+		-- Untracked-quest auto-detection - dev-only, see XComp.IsDevMode
+		-- above. Off for every real player by default; only runs at all
+		-- once the hidden slash command has switched it on for this
+		-- account. Delayed half a second - the quest log isn't always
+		-- fully populated the instant ADDON_LOADED fires.
+		if XComp.IsDevMode() then
+			C_Timer.After(0.5, function()
+				local found = XComp.Data:ScanQuestLogForUntracked()
+				XComp.Data:InjectAutoDetectedItems()
+				if #found > 0 then
+					if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
+						XComp.UI:RefreshSections()
+					end
+					XComp.UI:ShowCompletionToast(string.format(
+						"Added %d new repeatable quest%s to the tracker (Custom category)",
+						#found, #found > 1 and "s" or ""))
+				end
+			end)
+		end
+	elseif event == "QUEST_ACCEPTED" then
+		-- Live catch for anything accepted DURING this session, same
+		-- detection + auto-add as the login scan above - dev-only, same gate.
+		if not XComp.IsDevMode() then return end
+		local questID = ...
+		local isNew, name, frequency = XComp.Data:CheckQuestForCatalog(questID)
+		if isNew then
+			XComp.Data:InjectAutoDetectedItems()
+			if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
+				XComp.UI:RefreshSections()
+			end
+			XComp.UI:ShowCompletionToast("Added new " .. frequency .. " quest to the tracker: " .. name)
+		end
 	elseif event == "QUEST_TURNED_IN" then
 		-- Completion popup while the window's closed (build-plan item 10) -
 		-- match the turned-in quest against the catalog; if it's a tracked
@@ -332,6 +396,12 @@ SlashCmdList["XALSCOMPENDIUM"] = function(msg)
 		XComp.Options:ToggleStandalone()
 	elseif msg == "diag" then
 		XComp.UI:ShowDiagnostics()
+	elseif msg == "devmode" then
+		-- Hidden, undocumented toggle for the dev-only auto-detection
+		-- system - deliberately not listed anywhere in help text, settings,
+		-- or the changelog. See XComp.IsDevMode above.
+		XComp_DB.devMode = not XComp_DB.devMode
+		print("|cff999999Xal's Compendium:|r dev mode " .. (XComp_DB.devMode and "ON" or "OFF"))
 	else
 		XComp.UI:Toggle()
 	end
