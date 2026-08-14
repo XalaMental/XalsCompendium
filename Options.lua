@@ -284,7 +284,7 @@ local function BuildHeader(parent, onReset)
 	local ar, ag, ab = XComp.GetAccentColor()
 
 	local title = parent:CreateFontString(nil, "OVERLAY")
-	title:SetFont("Fonts\\MORPHEUS.TTF", 20, "")
+	title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 20, "")
 	title:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
 	title:SetTextColor(ar, ag, ab, 1)
 	title:SetText("Xal's Compendium")
@@ -1325,6 +1325,13 @@ function O:PopulateDiagnosticsRows(container)
 	runBtn:ClearAllPoints()
 	runBtn:SetPoint("TOPLEFT", btnRow, "TOPLEFT", 0, 0)
 
+	-- Export Detected Quests - dev-only, see XComp.IsDevMode (Core.lua).
+	-- Not created at all for a regular player - there is nothing to click,
+	-- nothing to discover, when dev mode is off (the default for everyone).
+	if XComp.IsDevMode() then
+		local exportBtn = MakeFlatButton(btnRow, runBtn, 190, "Export Detected Quests", function() XComp.UI:ShowUntrackedExport() end)
+	end
+
 	container:SetHeight(70 + 14 + 30)
 end
 
@@ -1990,11 +1997,22 @@ function O:BuildStandaloneWindow()
 	-- margins) eats a fixed ~155px, and the currency grid especially still
 	-- needs real width to lay out in columns.
 	f:SetSize(560, 480)
-	f:SetPoint("CENTER")
+	-- Anchors to a screen CORNER (only used the first time; once dragged,
+	-- its real position is remembered permanently via
+	-- XComp_DB.optionsWindowPoint) - part of a shared corner scheme across
+	-- every Xal's addon's big settings window, see the "Default window
+	-- position" rule in the shared brand-style memory.
+	local savedPoint = XComp_DB.optionsWindowPoint
+	if savedPoint then
+		f:SetPoint(savedPoint[1], UIParent, savedPoint[2], savedPoint[3], savedPoint[4])
+	else
+		f:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -40, 40)
+	end
 	-- DIALOG strata so it renders above other UI (confirmed via screenshot:
 	-- the player unit frame's health bar was showing through the bottom of
 	-- this window) - a plain frame defaults to MEDIUM otherwise.
 	f:SetFrameStrata("DIALOG")
+	f:SetToplevel(true)
 	f:SetBackdrop({
 		bgFile = "Interface\\Buttons\\WHITE8x8",
 		edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -2008,7 +2026,11 @@ function O:BuildStandaloneWindow()
 	f:EnableMouse(true)
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", f.StartMoving)
-	f:SetScript("OnDragStop", f.StopMovingOrSizing)
+	f:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		local point, _, relPoint, x, y = self:GetPoint()
+		XComp_DB.optionsWindowPoint = { point, relPoint, x, y }
+	end)
 
 	-- Corner-handle resizing, gated on holding Shift while dragging - same
 	-- pattern as the main tracker window's resize grip (UI.lua).
