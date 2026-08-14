@@ -28,11 +28,15 @@ local Brand = addonTable.BrandStyle
 -- (no "version" field here on purpose - see note above)
 W.WHATS_NEW = {
     date = "August 12, 2026",
-    intro = "The tracker window now fades out of sight when you're not looking at it, and the whole addon's look now matches the rest of Xal's addons.",
+    intro = "A bigger update than planned - the whole addon now matches the branded look, plus new behavior and a fixed bug on the weekly dungeon board.",
     sections = {
         { heading = "New", items = {
             "Fade when idle - the tracker fades to fully invisible when you're not moused over it, and snaps back on hover. Adjustable in Appearance settings.",
             "Minimize button - collapses the tracker into a small \"D / W\" bar showing Daily/Weekly items left, so it can stay tucked away without closing.",
+            "Real minimap icon - a custom parchment-and-quill icon instead of the placeholder look.",
+        } },
+        { heading = "Fixed", items = {
+            "The weekly dungeon board now correctly tracks as one rotating slot instead of showing all 5 possible dungeons as active every week.",
         } },
     },
 }
@@ -66,8 +70,11 @@ local MAX_FH = 560 -- clamp so an unusually long release note can't run off-scre
 local function BuildFrame(installedVersion)
     local f = CreateFrame("Frame", "XalsCompendiumWhatsNewFrame", UIParent)
     f:SetSize(FW, 360) -- placeholder height; set for real below once content is laid out
-    f:SetPoint("CENTER")
+    -- Staggered off dead-center - see the "Default window position" rule
+    -- in the shared brand-style memory.
+    f:SetPoint("CENTER", UIParent, "CENTER", 260, -100)
     f:SetFrameStrata("DIALOG")
+    f:SetToplevel(true)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -84,7 +91,7 @@ local function BuildFrame(installedVersion)
     -- "installedVersion" is the REAL live version (from CheckAndShow), not a
     -- hand-typed field - it always matches whatever actually got tagged.
     local verLine = Brand.FS(f, "Version " .. installedVersion .. (data.date and ("  ·  " .. data.date) or ""),
-        "Fonts\\ARIALN.TTF", 12, "", Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
+        "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "", Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
     verLine:SetPoint("TOP", f, "TOP", 0, -58)
     verLine:SetJustifyH("CENTER")
 
@@ -92,7 +99,7 @@ local function BuildFrame(installedVersion)
 
     local y = 92
     if data.intro and data.intro ~= "" then
-        local intro = Brand.FS(f, data.intro, "Fonts\\ARIALN.TTF", 12, "", 0.85, 0.85, 0.85)
+        local intro = Brand.FS(f, data.intro, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "", 0.85, 0.85, 0.85)
         intro:SetPoint("TOPLEFT", f, "TOPLEFT", 30, -y)
         intro:SetWidth(FW - 60)
         intro:SetJustifyH("LEFT")
@@ -101,13 +108,13 @@ local function BuildFrame(installedVersion)
     end
 
     for _, section in ipairs(data.sections or {}) do
-        local head = Brand.FS(f, section.heading, "Fonts\\ARIALN.TTF", 13, "OUTLINE",
+        local head = Brand.FS(f, section.heading, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 13, "OUTLINE",
             Brand.ACCENT[1], Brand.ACCENT[2], Brand.ACCENT[3])
         head:SetPoint("TOPLEFT", f, "TOPLEFT", 30, -y)
         y = y + 20
 
         for _, item in ipairs(section.items or {}) do
-            local bullet = Brand.FS(f, "-  " .. item, "Fonts\\ARIALN.TTF", 12, "",
+            local bullet = Brand.FS(f, "-  " .. item, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "",
                 Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
             bullet:SetPoint("TOPLEFT", f, "TOPLEFT", 36, -y)
             bullet:SetWidth(FW - 76)
