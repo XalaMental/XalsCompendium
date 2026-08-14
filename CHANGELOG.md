@@ -4,16 +4,26 @@
 
 ---
 
-This one's mostly under the hood in terms of what changes for you day to day, but it's a solid step forward. The whole addon now matches the branded look I've been rolling out across all my addons - same gold accents, same clean button and checkbox style - instead of some of it still carrying the old default look. On top of that, I added a couple things people have wanted: the tracker window now fades out of sight when you're not actively looking at it, so it's not just sitting there taking up space, and you can hover over it to bring it right back. There's also a new minimize button that shrinks it down to a tiny bar showing what you've still got left today and this week, if you want it out of the way without closing it entirely. Small stuff, but it should make the addon feel a lot less in-your-face when you're not using it.
+This update ended up being bigger than I expected once I got going. The whole addon now matches the look I've been rolling out across my other addons - new icons, cleaner checkboxes, a proper minimap icon instead of the placeholder, all of it. The tracker window can also fade out of sight when you're not using it and shrink down to a tiny bar if you want it out of the way without closing it. I also caught a real bug - the weekly dungeon board was showing all five possible dungeons as active every week, when really only one of them is up at a time, so that's fixed now. And the catalog itself got a lot bigger this update - a couple dozen more real quests added in, including some I only caught by watching my own account while I played. Bit by bit this thing is turning into what I actually pictured when I started it.
 
 ### 🆕 New
 - **Fade when idle** - the tracker window fades to fully invisible when you're not moused over it, and snaps back to full opacity the moment you hover it. How transparent it goes while idle is adjustable in Appearance settings (defaults to fully invisible).
 - **Minimize button** - collapses the tracker into a small "D / W" bar showing how many Daily and Weekly items you've got left, so it can stay tucked away without closing it entirely.
 - **What's New splash** - now pops up automatically the first time you log in after an update, same as Xal's other addons.
+- **Real minimap icon** - a proper custom icon (parchment scroll and quill) instead of the old placeholder look.
+
+### 🐛 Fixed
+- The weekly dungeon board was showing all 5 possible dungeons as separate weekly quests at once - it's actually one rotating slot (only one is active per week), so it now shows as a single item that tracks whichever one is actually up.
+
+### 🗺️ Catalog
+- Added Showdown on Val, Showdown on Val (Heroic), Showdown on Naigtal, and Showdown on Naigtal (Heroic) to Weekly Events.
+- Added 20 more verified quests across Weekly Events, World Quests, Professions, and Legacy content.
 
 ### ⚙️ Under the hood
 - Buttons, checkboxes, and divider lines across the whole addon now match the shared Xal's brand look (accent-gold borders, flat style, thicker lines) instead of Blizzard's default grey/native style.
 - Background color darkened slightly to match the current brand standard.
+- Checkbox checkmarks look a little cleaner/better-centered now.
+- Window titles switched to a cleaner custom font instead of the old default.
 
 ## 1.0.6 - August 12, 2026
 
