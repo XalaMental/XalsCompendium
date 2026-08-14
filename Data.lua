@@ -96,14 +96,81 @@ do
 		{ uid = "quest-96049", name = "Stalkers of the Stars", questID = 96049, children = {} },
 		{ uid = "quest-96080", name = "Void Strike", questID = 96080, children = {} },
 		{ uid = "quest-96703", name = "Veterans of the Great Dark", questID = 96703, children = {} },
-		{ uid = "quest-93751", name = "Windrunner Spire", questID = 93751, children = {} },
-		{ uid = "quest-93753", name = "Magisters' Terrace", questID = 93753, children = {} },
-		{ uid = "quest-93754", name = "Maisara Caverns", questID = 93754, children = {} },
-		{ uid = "quest-93758", name = "Nexus-Point Xenas", questID = 93758, children = {} },
+		-- Weekly dungeon board - a ROTATING single slot, only ONE of these
+		-- 5 dungeons is actually the live/offered quest in any given week
+		-- (confirmed by the user 2026-08-13 - Murder Row was this week's,
+		-- the other 4 weren't simultaneously active). questIDs (plural) -
+		-- GetItemStatus treats it complete if ANY one is flagged completed.
+		{ uid = "weekly-dungeon-rotation", name = "Weekly Dungeon Quest (rotates)", questIDs = { 93751, 93752, 93753, 93754, 93758 }, children = {} },
 		{ uid = "quest-98220", name = "Altar of Fangs", questID = 98220, children = {} },
+		-- Showdown on Val / Naigtal (2026-08-12) - real, verified weekly
+		-- disruption-zone quests, both Normal and Heroic tracked separately
+		-- since they're independently completable and not every player runs
+		-- Heroic (confirmed via Wowhead: quest=96713/96714/96717/96718).
+		{ uid = "quest-96713", name = "Showdown on Val", questID = 96713, children = {} },
+		{ uid = "quest-96714", name = "Showdown on Val (Heroic)", questID = 96714, children = {} },
+		{ uid = "quest-96717", name = "Showdown on Naigtal", questID = 96717, children = {} },
+		{ uid = "quest-96718", name = "Showdown on Naigtal (Heroic)", questID = 96718, children = {} },
+		-- Batch from the dev-only auto-detection tool's export report
+		-- (2026-08-12), each individually verified against Wowhead before
+		-- being added - not a raw dump. Left OUT: Tracking Quest (75511,
+		-- Blizzard's own "Hidden Quest" type - not meant to be player-facing)
+		-- and Special Assignment: Capstone 1 - Unlock (91193, an unlock/
+		-- prerequisite step rather than the actual reward quest).
+		{ uid = "quest-94386", name = "Void Assaults: Zul'Aman", questID = 94386, children = {} },
+		{ uid = "quest-96640", name = "Bounty of the Cursed", questID = 96640, children = {} },
+		-- Murder Row (93752) is part of the rotating dungeon-board pool
+		-- above, not a standalone item - see "Weekly Dungeon Quest (rotates)".
+		{ uid = "quest-95440", name = "Housewarming", questID = 95440, children = {} },
+		{ uid = "quest-95413", name = "Community Engagement", questID = 95413, children = {} },
+		{ uid = "quest-95416", name = "Going Postal", questID = 95416, children = {} },
+		{ uid = "quest-98204", name = "Cursed Keepsake", questID = 98204, children = {} },
 	}
 	for _, item in ipairs(seedItems) do
 		table.insert(weeklyEvents.items, item)
+	end
+
+	local worldQuests = weeklyType.categories[7]
+	local worldQuestItems = {
+		{ uid = "quest-96492", name = "Special Assignment: Demand and Supply", questID = 96492, children = {} },
+		{ uid = "quest-93605", name = "The World Awaits", questID = 93605, children = {} },
+		{ uid = "quest-94866", name = "Special Assignment: Ours Once More!", questID = 94866, children = {} },
+		{ uid = "quest-92848", name = "Special Assignment: The Grand Magister's Drink", questID = 92848, children = {} },
+		{ uid = "quest-89354", name = "Preparing for Battle", questID = 89354, children = {} },
+	}
+	for _, item in ipairs(worldQuestItems) do
+		table.insert(worldQuests.items, item)
+	end
+
+	local professions = weeklyType.categories[4]
+	table.insert(professions.items, { uid = "quest-93691", name = "Blacksmithing Services Requested", questID = 93691, children = {} })
+
+	-- Daily-frequency housing/neighborhood content - bucketed under Custom
+	-- (not "Weekly Events", which would read wrong under the Daily type).
+	local dailyType = currentTier.types[1]
+	local dailyCustom = dailyType.categories[8]
+	local dailyItems = {
+		{ uid = "quest-95336", name = "Frenzied Fossicking", questID = 95336, children = {} },
+		{ uid = "quest-95407", name = "Autumnal Addresses", questID = 95407, children = {} },
+		{ uid = "quest-95768", name = "My Stuff's Better Than Your Stuff", questID = 95768, children = {} },
+		{ uid = "quest-95673", name = "Suspicious Scare-gull", questID = 95673, children = {} },
+	}
+	for _, item in ipairs(dailyItems) do
+		table.insert(dailyCustom.items, item)
+	end
+
+	-- Legacy tier - old-expansion content, confirmed via Wowhead as
+	-- Battle for Azeroth (Azerite) and The War Within (Lynx Rescue), not
+	-- Midnight, so these belong under Legacy rather than Current.
+	local legacyTier = D.Catalog.tiers[2]
+	local legacyWeekly = legacyTier.types[2]
+	local legacyWorldQuests = legacyWeekly.categories[7]
+	local legacyItems = {
+		{ uid = "quest-53436", name = "Azerite for the Alliance", questID = 53436, children = {} },
+		{ uid = "quest-82158", name = "Special Assignment: Lynx Rescue", questID = 82158, children = {} },
+	}
+	for _, item in ipairs(legacyItems) do
+		table.insert(legacyWorldQuests.items, item)
 	end
 end
 
@@ -123,6 +190,11 @@ function D:FindItemByQuestID(questID)
 	local function searchItems(items)
 		for _, item in ipairs(items) do
 			if item.questID == questID then return item end
+			if item.questIDs then
+				for _, qid in ipairs(item.questIDs) do
+					if qid == questID then return item end
+				end
+			end
 			if item.children and #item.children > 0 then
 				local found = searchItems(item.children)
 				if found then return found end
@@ -216,6 +288,27 @@ function D:GetItemStatus(item, currentResetEpoch)
 		-- Override belongs to a previous cycle - stale. Clean it up now
 		-- (storage hygiene) rather than leaving it to linger in SavedVariables.
 		self:ClearStaleOverride(item.uid, currentResetEpoch)
+	end
+
+	-- questIDs (plural) is for a ROTATING single weekly/daily slot - only
+	-- ONE of the listed quests is actually live/offered in any given cycle
+	-- (e.g. the "dungeon of the week" board only ever has ONE of the 5
+	-- possible dungeon quests active at a time - confirmed by the user
+	-- 2026-08-13, "it's trying to make every single one of those a weekly
+	-- quest at the same time. That's not how it works"). The item as a
+	-- whole is complete if ANY one of them is flagged completed - whichever
+	-- one wasn't this cycle's active quest was never offered in the first
+	-- place, so it can never itself be flagged, and never falsely blocks
+	-- the item from reading complete.
+	if item.questIDs then
+		local isComplete = false
+		for _, qid in ipairs(item.questIDs) do
+			if C_QuestLog.IsQuestFlaggedCompleted(qid) then
+				isComplete = true
+				break
+			end
+		end
+		return isComplete, nil, nil, false
 	end
 
 	if not item.questID then
@@ -477,7 +570,16 @@ function D:RunDiagnostics()
 
 	local function checkItem(path, item, resetType)
 		total = total + 1
-		if not item.questID then
+		if item.questIDs then
+			-- Rotating pool (e.g. "dungeon of the week") - list every
+			-- possible quest ID's link, but frequency mismatch-checking is
+			-- skipped since only ONE is ever actually live/cached at a time.
+			local links = {}
+			for _, qid in ipairs(item.questIDs) do
+				table.insert(links, string.format("id %d (https://www.wowhead.com/quest=%d)", qid, qid))
+			end
+			table.insert(lines, string.format("%s | %s - rotating pool: %s", path, item.name, table.concat(links, ", ")))
+		elseif not item.questID then
 			noQuestID = noQuestID + 1
 			table.insert(lines, string.format("%s | %s - no quest ID set (manual-only)", path, item.name))
 		else
@@ -524,6 +626,155 @@ function D:RunDiagnostics()
 	table.insert(lines, 1, "")
 	table.insert(lines, 1, string.format("Xal's Compendium diagnostics - %d items checked, %d with no quest ID, %d frequency mismatches.", total, noQuestID, mismatches))
 	return lines
+end
+
+-------------------------------------------------
+-- Untracked repeatable quest detection (2026-08-12) - the local Icy Veins
+-- cross-referencing tool can only ever catch quests that site has already
+-- published, which misses brand-new zone content until a guide exists for
+-- it. This catches it directly instead, straight from the player's own
+-- quest log, using the same C_QuestLog.GetInfo().frequency technique
+-- RunDiagnostics already relies on - no need to wait on a third-party site.
+-------------------------------------------------
+local function EnsureUntrackedTable()
+	XComp_DB.untrackedQuests = XComp_DB.untrackedQuests or {}
+	return XComp_DB.untrackedQuests
+end
+
+-- Checks a single questID: if it's a live Daily/Weekly/recurring quest (per
+-- the game's own classification) and isn't anywhere in the catalog yet,
+-- records it. Returns true if this was a NEW find (not already recorded),
+-- so callers can decide whether to show a one-time notification.
+--
+-- Enum.QuestFrequency has a THIRD value beyond Daily/Weekly - ResetByScheduler
+-- (confirmed against Blizzard's own generated API docs, 2026-08-12) - for
+-- content whose repeat cadence is driven by some other recurring system
+-- instead of the standard daily/weekly reset. Missing this was almost
+-- certainly why some real repeatable quests weren't getting caught. Tagged
+-- as "recurring" rather than guessed at daily/weekly, since the enum alone
+-- doesn't say which cadence it actually follows - InjectAutoDetectedItems
+-- below treats it as weekly for bucketing purposes (most common case for
+-- this kind of content), and the export report keeps the honest
+-- "recurring" label so it gets double-checked by hand.
+function D:CheckQuestForCatalog(questID)
+	if not questID then return false end
+	if self:FindItemByQuestID(questID) then return false end -- already tracked
+
+	local logIndex = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(questID)
+	if not logIndex then return false end
+	local info = C_QuestLog.GetInfo(logIndex)
+	if not info or not info.frequency then return false end
+
+	local liveType
+	if info.frequency == Enum.QuestFrequency.Daily then
+		liveType = "daily"
+	elseif info.frequency == Enum.QuestFrequency.Weekly then
+		liveType = "weekly"
+	elseif info.frequency == Enum.QuestFrequency.ResetByScheduler then
+		liveType = "recurring"
+	end
+	if not liveType then return false end -- one-time quest, not what we're after
+
+	local untracked = EnsureUntrackedTable()
+	if untracked[questID] then return false end -- already recorded
+
+	untracked[questID] = { name = info.title, frequency = liveType, firstSeen = time() }
+	return true, info.title, liveType
+end
+
+-- Scans the WHOLE current quest log, not just newly-accepted quests - so
+-- anything picked up before this update ever ran gets caught too, not just
+-- quests accepted from here on out.
+function D:ScanQuestLogForUntracked()
+	local found = {}
+	local numEntries = C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetNumQuestLogEntries() or 0
+	for i = 1, numEntries do
+		local info = C_QuestLog.GetInfo(i)
+		if info and not info.isHeader and info.questID then
+			if self:CheckQuestForCatalog(info.questID) then
+				table.insert(found, info.questID)
+			end
+		end
+	end
+	return found
+end
+
+function D:GetUntrackedQuests()
+	local untracked = EnsureUntrackedTable()
+	local list = {}
+	for questID, entry in pairs(untracked) do
+		table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen })
+	end
+	table.sort(list, function(a, b) return a.firstSeen > b.firstSeen end)
+	return list
+end
+
+function D:ClearUntrackedQuest(questID)
+	local untracked = EnsureUntrackedTable()
+	untracked[questID] = nil
+end
+
+-- Copyable export report (same shape/purpose as RunDiagnostics) - the
+-- auto-detected Custom-category items only live on THIS player's account;
+-- getting them properly sorted into the real shared catalog (so every
+-- player gets them, not just whoever happened to pick the quest up first)
+-- means handing this list off by hand, same as the very first 8 seed items
+-- were. One line per detected quest: name, ID, Daily/Weekly, Wowhead link.
+function D:GetUntrackedReport()
+	local list = self:GetUntrackedQuests()
+	local lines = {}
+	table.insert(lines, string.format("Xal's Compendium - %d auto-detected quest%s not yet in the shared catalog.",
+		#list, #list == 1 and "" or "s"))
+	table.insert(lines, "")
+	for _, entry in ipairs(list) do
+		table.insert(lines, string.format("%s (id %d) - %s - https://www.wowhead.com/quest=%d",
+			entry.name, entry.questID, entry.frequency, entry.questID))
+	end
+	return lines
+end
+
+-- Turns every recorded untracked find into a REAL, live, trackable catalog
+-- item under Current -> Daily/Weekly -> Custom (explicit follow-up to the
+-- detection above, 2026-08-12: "is there a way we can... make it so it
+-- automatically acknowledges those in the addon?"). Sourced entirely from
+-- XComp_DB.untrackedQuests (account-wide, persists across sessions/reloads)
+-- rather than needing a Data.lua edit - the Catalog table itself is rebuilt
+-- fresh every session, so this has to re-run every time XComp_DB is
+-- available, not just once. Safe to call repeatedly - skips anything
+-- already present (checked via FindItemByQuestID) instead of duplicating.
+function D:InjectAutoDetectedItems()
+	local untracked = EnsureUntrackedTable()
+	local currentTier = self.Catalog.tiers[1] -- "current" - freshly detected content is never Legacy
+	for questID, entry in pairs(untracked) do
+		if not self:FindItemByQuestID(questID) then
+			-- "recurring" (Enum.QuestFrequency.ResetByScheduler) doesn't map
+			-- to a real type key on its own - bucketed under Weekly as the
+			-- most common cadence for that kind of content, since it still
+			-- needs to land somewhere to be trackable at all. The export
+			-- report keeps the honest "recurring" label so this guess gets
+			-- double-checked by hand when it's added to the real catalog.
+			local bucketKey = entry.frequency
+			if bucketKey == "recurring" then bucketKey = "weekly" end
+			local typeSection
+			for _, t in ipairs(currentTier.types) do
+				if t.key == bucketKey then typeSection = t break end
+			end
+			if typeSection then
+				local customCategory
+				for _, c in ipairs(typeSection.categories) do
+					if c.key == "custom" then customCategory = c break end
+				end
+				if customCategory then
+					table.insert(customCategory.items, {
+						uid = "quest-" .. questID,
+						name = entry.name,
+						questID = questID,
+						children = {},
+					})
+				end
+			end
+		end
+	end
 end
 
 -------------------------------------------------
