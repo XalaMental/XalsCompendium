@@ -12,3 +12,8 @@ if a font change doesn't apply immediately.
 
 If the file is ever missing or invalid, the addon automatically falls
 back to the default stock Friz Quadrata font.
+
+FiraSans-Medium.ttf is also bundled here, used for the fixed/branded body
+text on the What's New splash (window titles use CustomFont.ttf above;
+this is body copy specifically, same as Xal's Quest Compass). Licensed
+under the SIL Open Font License, included as FiraSans-LICENSE.txt.
