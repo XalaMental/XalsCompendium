@@ -31,6 +31,38 @@ end
 local FRAME_W, FRAME_H = 380, 480
 local ROW_INSET = 12
 
+-- Shared hover handling for the fade-when-idle behavior - called from BOTH
+-- the main frame's OnEnter/OnLeave and the side strip's (see
+-- CreateSideStrip), so moving the mouse onto the side strip counts as
+-- still hovering the window instead of triggering a fade-out. Hold/fade
+-- durations increased 2026-08-16 (explicit request: the previous 0.5s
+-- hold read as "almost instant").
+local HOVER_FADE_HOLD = 1.5
+local HOVER_FADE_DURATION = 0.4
+
+function U:HandleHoverEnter()
+	local f = self.mainFrame
+	if not f then return end
+	f.fadeOutToken = nil
+	f:SetAlpha(1)
+end
+
+function U:HandleHoverLeave()
+	local f = self.mainFrame
+	if not f then return end
+	local token = {}
+	f.fadeOutToken = token
+	C_Timer.After(HOVER_FADE_HOLD, function()
+		if f.fadeOutToken ~= token then return end
+		if f:IsMouseOver() then return end
+		-- sideStrip lives on the UI object (self), not on the frame table -
+		-- checking f.sideStrip here was always nil, the real bug.
+		if self.sideStrip and self.sideStrip:IsShown() and self.sideStrip:IsMouseOver() then return end
+		local idle = (XComp_DB.settings and XComp_DB.settings.idleAlpha) or 0
+		UIFrameFadeOut(f, HOVER_FADE_DURATION, f:GetAlpha(), idle)
+	end)
+end
+
 -------------------------------------------------
 -- Main window
 -------------------------------------------------
@@ -54,6 +86,19 @@ function U:CreateMainFrame()
 		edgeFile = "Interface\\Buttons\\WHITE8x8",
 		edgeSize = 1,
 	})
+
+	-- Panel background art (2026-08-15) - dark green swirl texture sitting
+	-- on top of the flat backdrop color, below everything else (border,
+	-- dividers, text all draw at ARTWORK/OVERLAY, above this BORDER-layer
+	-- texture). Tested stretched across the full resize range (280x200 to
+	-- 380x800) with no visible distortion, since the source art is soft/
+	-- low-detail enough that directional stretching doesn't show. Hidden
+	-- in frameless mode and its own alpha follows the same Background
+	-- Transparency slider as everything else - see ApplyTheme below.
+	local bgImage = f:CreateTexture(nil, "BORDER")
+	bgImage:SetAllPoints(f)
+	bgImage:SetTexture("Interface\\AddOns\\XalsCompendium\\Textures\\PanelBackground.jpg")
+	f.bgImage = bgImage
 
 	f:SetMovable(true)
 	f:EnableMouse(true)
@@ -128,21 +173,36 @@ function U:CreateMainFrame()
 	overall:SetPoint("TOP", title, "BOTTOM", 0, -4)
 	f.overallLabel = overall
 
-	-- Hide-completed filter toggle.
-	local filterCB = XComp.MakeCheckbox(f, 18)
-	filterCB:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -46)
-	filterCB:SetChecked(XComp_DB.settings and XComp_DB.settings.hideCompleted or false)
-	filterCB.OnToggle = function(self)
-		XComp_DB.settings = XComp_DB.settings or {}
-		XComp_DB.settings.hideCompleted = self:GetChecked() and true or false
-		U:RefreshSections()
+	-- Hide-completed toggle - moved to a bottom-left text-link button
+	-- (2026-08-15, explicit request: "the header section should be a
+	-- clean visual look") instead of a checkbox+label sitting under the
+	-- title. Same text/link style as XComp.MakeCloseButton, mirrored to
+	-- the opposite bottom corner.
+	local filterToggle = CreateFrame("Button", nil, f)
+	filterToggle:SetSize(110, 20)
+	filterToggle:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 24, 8)
+	local filterToggleLabel = filterToggle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	filterToggleLabel:SetPoint("LEFT")
+	filterToggle.label = filterToggleLabel
+	local function RefreshFilterToggleLabel()
+		local hidden = XComp_DB.settings and XComp_DB.settings.hideCompleted
+		filterToggleLabel:SetText(hidden and "Show completed" or "Hide completed")
 	end
-	local filterLbl = f:CreateFontString(nil, "OVERLAY")
-	filterLbl:SetFontObject(XComp.BodyFont)
-	filterLbl:SetPoint("LEFT", filterCB, "RIGHT", 2, 0)
-	filterLbl:SetText("Hide completed")
-	f.filterCB = filterCB
-	f.filterLbl = filterLbl
+	RefreshFilterToggleLabel()
+	local far, fag, fab = XComp.GetAccentColor()
+	filterToggleLabel:SetTextColor(far, fag, fab, 1)
+	filterToggle:SetScript("OnEnter", function() filterToggleLabel:SetTextColor(1, 1, 1, 1) end)
+	filterToggle:SetScript("OnLeave", function()
+		local ar2, ag2, ab2 = XComp.GetAccentColor()
+		filterToggleLabel:SetTextColor(ar2, ag2, ab2, 1)
+	end)
+	filterToggle:SetScript("OnClick", function()
+		XComp_DB.settings = XComp_DB.settings or {}
+		XComp_DB.settings.hideCompleted = not XComp_DB.settings.hideCompleted
+		RefreshFilterToggleLabel()
+		U:RefreshSections()
+	end)
+	f.filterToggle = filterToggle
 
 	local divider = f:CreateTexture(nil, "ARTWORK")
 	divider:SetHeight(2)
@@ -150,88 +210,110 @@ function U:CreateMainFrame()
 	divider:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -68)
 	f.divider = divider
 
-	-- Icon row: Great Vault, roster-refresh, item level - moved here (below
-	-- the divider, own row) per explicit correction; anchored at the title
-	-- instead, they crammed into the title text once the window got
-	-- narrowed toward its width minimum.
-	local vaultBtn = CreateFrame("Button", nil, f)
-	vaultBtn:SetSize(24, 24)
-	vaultBtn:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -8)
-	local vaultIcon = vaultBtn:CreateTexture(nil, "ARTWORK")
-	vaultIcon:SetAllPoints()
-	-- Real locked-reward atlas from Blizzard's own Blizzard_WeeklyRewards.lua
-	-- source - the actual keyhole/lock graphic the vault UI itself shows.
-	vaultIcon:SetAtlas("evergreen-weeklyrewards-reward-locked")
-	vaultBtn.icon = vaultIcon
-	vaultBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	vaultBtn:SetScript("OnClick", function()
-		if not C_AddOns.IsAddOnLoaded("Blizzard_WeeklyRewards") then
-			C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
+	-- View tabs (Daily / Weekly / Legacy) - replaces the old Tier/Type
+	-- collapsible-arrow tree and the roster-refresh/ilvl icon row entirely
+	-- (rebuilt 2026-08-15, explicit correction: tabs belong below the
+	-- divider, not in the header; ilvl and the manual roster-refresh button
+	-- are cut, both redundant/fluff - ilvl duplicates the C keybind, and
+	-- the refresh button duplicates what RefreshSections already does
+	-- automatically on every redraw). Great Vault/currencies moved to the
+	-- separate side strip (see CreateSideStrip below), not a tab at all.
+	-- Only one view renders at a time; the subtitle above shows that view's
+	-- own completion count, not a combined total.
+	local TAB_DEFS = {
+		{ key = "daily", label = "Daily" },
+		{ key = "weekly", label = "Weekly" },
+		{ key = "legacy", label = "Legacy" },
+	}
+	local tabRow = CreateFrame("Frame", nil, f)
+	tabRow:SetSize(200, 20)
+	tabRow:SetPoint("TOP", divider, "BOTTOM", 0, -8)
+	local tabButtons = {}
+	local function RefreshTabHighlight()
+		local selected = (XComp_DB.settings and XComp_DB.settings.selectedType) or "weekly"
+		local ar3, ag3, ab3 = XComp.GetAccentColor()
+		for _, tb in ipairs(tabButtons) do
+			if tb.key == selected then
+				tb.label:SetTextColor(1, 1, 1, 1)
+			else
+				tb.label:SetTextColor(ar3, ag3, ab3, 0.6)
+			end
 		end
-		if WeeklyRewardsFrame:IsShown() then
-			WeeklyRewardsFrame:Hide()
+	end
+	local prevTab
+	for _, def in ipairs(TAB_DEFS) do
+		local tb = CreateFrame("Button", nil, tabRow)
+		tb.key = def.key
+		local lbl = tb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		lbl:SetText(def.label)
+		tb.label = lbl
+		tb:SetSize(lbl:GetStringWidth() + 12, 20)
+		lbl:SetPoint("CENTER")
+		if prevTab then
+			tb:SetPoint("LEFT", prevTab, "RIGHT", 4, 0)
 		else
-			WeeklyRewardsFrame:Show()
+			tb:SetPoint("LEFT", tabRow, "LEFT", 0, 0)
 		end
-	end)
-	vaultBtn:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetText("Open Great Vault")
-		GameTooltip:Show()
-	end)
-	vaultBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	f.vaultBtn = vaultBtn
-
-	-- Manual roster-snapshot refresh (build-plan item 19) - updates
-	-- automatically on login/refresh already, this forces one right before
-	-- logging off. Classic icon FILE (INV_Misc_Head_Human_01), not a modern
-	-- atlas name - several atlas guesses went wrong earlier this session.
-	local refreshBtn = CreateFrame("Button", nil, f)
-	refreshBtn:SetSize(24, 24)
-	refreshBtn:SetPoint("LEFT", vaultBtn, "RIGHT", 6, 0)
-	local refreshIcon = refreshBtn:CreateTexture(nil, "ARTWORK")
-	refreshIcon:SetAllPoints()
-	refreshIcon:SetTexture("Interface\\Icons\\INV_Misc_Head_Human_01")
-	refreshBtn.icon = refreshIcon
-	refreshBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-	refreshBtn:SetScript("OnClick", function()
-		XComp.Data:UpdateRosterSnapshot()
-		U:ShowCompletionToast("Character snapshot updated for the Alts page")
-	end)
-	refreshBtn:SetScript("OnEnter", function(self)
-		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetText("Refresh this character's Alts page snapshot")
-		GameTooltip:AddLine("Updates automatically as you play - click this right before logging off to make sure it's current.", 1, 1, 1, true)
-		GameTooltip:Show()
-	end)
-	refreshBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-	f.refreshBtn = refreshBtn
-
-	-- Item level display (build-plan item 20, display half). Plain display,
-	-- not a button - opening the Character panel on click was redundant
-	-- (that's just the C keybind), removed per explicit correction.
-	local ilvlFrame = CreateFrame("Frame", nil, f)
-	ilvlFrame:SetSize(84, 24)
-	ilvlFrame:SetPoint("LEFT", refreshBtn, "RIGHT", 8, 0)
-	local ilvlText = ilvlFrame:CreateFontString(nil, "OVERLAY")
-	-- TitleFont instead of BodyFont - noticeably bigger (fontSize+2 vs
-	-- fontSize-2) per explicit "make it more prominent" request, while still
-	-- tracking the user's customizable font/outline/size settings live,
-	-- same as everything else that uses these shared font objects.
-	ilvlText:SetFontObject(XComp.TitleFont)
-	ilvlText:SetAllPoints()
-	ilvlText:SetJustifyH("LEFT")
-	XComp.ApplyTextShadow(ilvlText)
-	f.ilvlText = ilvlText
+		tb:SetScript("OnClick", function()
+			XComp_DB.settings = XComp_DB.settings or {}
+			XComp_DB.settings.selectedType = def.key
+			RefreshTabHighlight()
+			U:RefreshSections()
+		end)
+		table.insert(tabButtons, tb)
+		prevTab = tb
+	end
+	f.tabRow = tabRow
+	f.RefreshTabHighlight = RefreshTabHighlight
+	RefreshTabHighlight()
 
 	-- Sections render inside a real scroll frame, not a plain container -
 	-- content that exceeds the visible area scrolls instead of spilling
 	-- outside the window border (confirmed bug with the earlier plain-
-	-- container + auto-resize-only approach). Standard native
-	-- UIPanelScrollFrameTemplate.
-	local scrollFrame = CreateFrame("ScrollFrame", "XalsCompendiumScrollFrame", f, "UIPanelScrollFrameTemplate")
-	scrollFrame:SetPoint("TOPLEFT", vaultBtn, "BOTTOMLEFT", 0, -8)
-	scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -30, 40)
+	-- container + auto-resize-only approach). Plain ScrollFrame, NOT
+	-- UIPanelScrollFrameTemplate (2026-08-15 correction - Blizzard's default
+	-- arrow-button scrollbar was already explicitly rejected once, in Quest
+	-- Compass: see its CreateScrollableSection helper in
+	-- XalsQuestCompass.lua, "NOT Blizzard's default arrow-button scrollbar
+	-- (explicitly disliked)"). Ported the same thin custom scrollbar here
+	-- instead of Blizzard's template, for consistency across the addon
+	-- suite.
+	local scrollFrame = CreateFrame("ScrollFrame", "XalsCompendiumScrollFrame", f)
+	scrollFrame:SetPoint("TOPLEFT", tabRow, "BOTTOMLEFT", 0, -8)
+	scrollFrame:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -18, 40)
+
+	-- Thin custom scrollbar (ported from Quest Compass's CreateScrollableSection)
+	-- - a native Slider drives the actual scroll position, restyled to a
+	-- thin accent-gold thumb with no track background and no arrow buttons.
+	-- Auto-hides when content fits without scrolling.
+	local scrollTrack = CreateFrame("Frame", nil, f, "BackdropTemplate")
+	scrollTrack:SetPoint("TOPRIGHT", scrollFrame, "TOPRIGHT", 10, 0)
+	scrollTrack:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", 10, 0)
+	scrollTrack:SetWidth(8)
+	scrollTrack:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+	scrollTrack:SetBackdropColor(1, 1, 1, 0.08)
+	scrollTrack:Hide()
+
+	local scrollThumb = CreateFrame("Slider", nil, scrollTrack)
+	scrollThumb:SetOrientation("VERTICAL")
+	scrollThumb:SetPoint("TOP", scrollTrack, "TOP", 0, 0)
+	scrollThumb:SetPoint("BOTTOM", scrollTrack, "BOTTOM", 0, 0)
+	scrollThumb:SetWidth(8)
+	scrollThumb:SetThumbTexture("Interface\\Buttons\\WHITE8x8")
+	local scrollThumbTex = scrollThumb:GetThumbTexture()
+	do
+		local sar, sag, sab = XComp.GetAccentColor()
+		scrollThumbTex:SetVertexColor(sar, sag, sab, 1)
+	end
+	scrollThumbTex:SetWidth(8)
+
+	local suppressScrollCallback = false
+	scrollThumb:SetScript("OnValueChanged", function(self, value)
+		if suppressScrollCallback then return end
+		scrollFrame:SetVerticalScroll(value)
+	end)
+	f.scrollTrack = scrollTrack
+	f.scrollThumb = scrollThumb
 
 	-- Width tracks the scroll frame automatically via anchors (including
 	-- if the window itself gets resized wider/narrower via the corner
@@ -258,13 +340,32 @@ function U:CreateMainFrame()
 	-- CreateFrame in Lua - UIPanelScrollFrameTemplate only wires it up for
 	-- XML-defined instances. Confirmed real bug elsewhere in the addon
 	-- (Options.lua's Currencies page) - fixed here too for consistency.
+	-- Moves the thumb (its OnValueChanged then drives the actual scroll),
+	-- same as Quest Compass's CreateScrollableSection.
 	scrollFrame:EnableMouseWheel(true)
 	scrollFrame:SetScript("OnMouseWheel", function(self, delta)
-		local maxScroll = math.max(scrollChild:GetHeight() - self:GetHeight(), 0)
-		local newScroll = self:GetVerticalScroll() - delta * 40
-		newScroll = math.max(0, math.min(newScroll, maxScroll))
-		self:SetVerticalScroll(newScroll)
+		scrollThumb:SetValue(scrollThumb:GetValue() - delta * 40)
 	end)
+
+	-- Called after content is (re)built and the window's final height is
+	-- set, so the thumb's range/size reflects the real visible area.
+	function f.UpdateScrollRange()
+		local visibleHeight = scrollFrame:GetHeight()
+		local contentHeight = scrollChild:GetHeight()
+		local maxScroll = math.max(0, contentHeight - visibleHeight)
+		suppressScrollCallback = true
+		scrollThumb:SetMinMaxValues(0, maxScroll)
+		scrollThumb:SetValue(0)
+		suppressScrollCallback = false
+		scrollFrame:SetVerticalScroll(0)
+		if maxScroll > 0 then
+			scrollTrack:Show()
+			local ratio = math.min(1, visibleHeight / contentHeight)
+			scrollThumbTex:SetHeight(math.max(20, visibleHeight * ratio))
+		else
+			scrollTrack:Hide()
+		end
+	end
 
 	local sectionsContent = CreateFrame("Frame", nil, scrollChild)
 	sectionsContent:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", ROW_INSET, -ROW_INSET)
@@ -290,11 +391,14 @@ function U:CreateMainFrame()
 	-- Fade-to-transparent when the mouse isn't over the window (explicit
 	-- request 2026-08-12) - always snaps to full opacity on hover; the
 	-- non-hover target opacity is the player-adjustable Idle Opacity slider
-	-- (Options.lua Appearance page), default 0 (fully invisible).
-	f:SetScript("OnEnter", function(self) self:SetAlpha(1) end)
-	f:SetScript("OnLeave", function(self)
-		U:ApplyIdleAlpha()
-	end)
+	-- (Options.lua Appearance page), default 0 (fully invisible). Wired to
+	-- BOTH the main frame and the side strip (see CreateSideStrip) via
+	-- U:HandleHoverEnter/Leave below - moving onto the side strip counts as
+	-- still hovering the window, and leaving either one starts the same
+	-- fade countdown (2026-08-16 correction: the side strip wasn't
+	-- included before, so mousing over its icons made the window vanish).
+	f:SetScript("OnEnter", function() U:HandleHoverEnter() end)
+	f:SetScript("OnLeave", function() U:HandleHoverLeave() end)
 
 	f:Hide()
 	self.mainFrame = f
@@ -328,12 +432,27 @@ function U:ApplyMinimizedState()
 	local minimized = XComp_DB.settings and XComp_DB.settings.minimized
 
 	local fullElements = {
-		f.title, f.overallLabel, f.filterCB, f.filterLbl, f.divider,
-		f.vaultBtn, f.refreshBtn, f.ilvlText, f.scrollFrame, f.resizeGrip, f.closeBtn,
+		f.title, f.overallLabel, f.tabRow, f.filterToggle, f.divider,
+		f.scrollFrame, f.resizeGrip, f.closeBtn,
 	}
+	-- Not part of fullElements below - its Show/Hide is driven by whether
+	-- content actually overflows (UpdateScrollRange), not just minimized
+	-- state, so a blanket Show() here would undo that auto-hide.
+	if f.scrollTrack and minimized then
+		f.scrollTrack:Hide()
+	end
+
 	for _, el in ipairs(fullElements) do
 		if el then
 			if minimized then el:Hide() else el:Show() end
+		end
+	end
+	if self.sideStrip then
+		local stripEnabled = not (XComp_DB.settings and XComp_DB.settings.showSideStrip == false)
+		if minimized or not stripEnabled then
+			self.sideStrip:Hide()
+		else
+			self.sideStrip:Show()
 		end
 	end
 
@@ -380,10 +499,15 @@ function U:ApplyTheme()
 	if IsFrameless() then
 		f:SetBackdropColor(0, 0, 0, 0)
 		f:SetBackdropBorderColor(0, 0, 0, 0)
+		if f.bgImage then f.bgImage:Hide() end
 	else
 		local br, bg, bb = XComp.GetBgColor()
 		f:SetBackdropColor(br, bg, bb, GetBgAlpha())
 		f:SetBackdropBorderColor(ar, ag, ab, 1)
+		if f.bgImage then
+			f.bgImage:Show()
+			f.bgImage:SetAlpha(GetBgAlpha())
+		end
 	end
 
 	f.title:SetTextColor(ar, ag, ab, 1)
@@ -394,6 +518,175 @@ function U:ApplyTheme()
 	-- resize (which only changes width/height, not the size of contents).
 	local scale = (XComp_DB.settings and XComp_DB.settings.scale) or 1
 	f:SetScale(scale)
+
+	self:ApplySideStripTheme()
+end
+
+-------------------------------------------------
+-- Side strip: Great Vault + tracked currencies (2026-08-15, explicit
+-- request) - a separate narrow panel outside the main window's right edge,
+-- not a tab and not inside the scrollable content, so it's never affected
+-- by list length or the scrollbar/resize grip. Toggled entirely off via
+-- Options for players who only want quest content. Parented to the main
+-- frame, so it shows/hides for free whenever the main frame does (a child
+-- frame's effective visibility already follows its parent's) - no extra
+-- wiring needed in U:Toggle.
+-------------------------------------------------
+local SIDE_ICON_SIZE = 28
+local SIDE_ICON_GAP = 8
+
+local function IsSideStripEnabled()
+	return not (XComp_DB.settings and XComp_DB.settings.showSideStrip == false)
+end
+
+function U:CreateSideStrip()
+	if self.sideStrip then return self.sideStrip end
+	local main = self:CreateMainFrame()
+
+	-- Sized to hug its own icon content, NOT stretched to match the main
+	-- window's full height (that was a real bug - a tall near-empty box
+	-- next to a short icon list). Height is set explicitly in
+	-- RefreshSideStrip once the icon count is known.
+	local strip = CreateFrame("Frame", "XalsCompendiumSideStrip", main, "BackdropTemplate")
+	strip:SetSize(SIDE_ICON_SIZE + 16, SIDE_ICON_SIZE + 16)
+	strip:SetPoint("TOPLEFT", main, "TOPRIGHT", 8, 0)
+	strip:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8x8",
+		edgeFile = "Interface\\Buttons\\WHITE8x8",
+		edgeSize = 1,
+	})
+	strip.icons = {}
+
+	-- Counts as hovering the main window too (see U:HandleHoverEnter/Leave
+	-- above) - without this, moving the mouse onto the strip's icons made
+	-- the whole window fade out from under it.
+	strip:EnableMouse(true)
+	strip:SetScript("OnEnter", function() U:HandleHoverEnter() end)
+	strip:SetScript("OnLeave", function() U:HandleHoverLeave() end)
+
+	self.sideStrip = strip
+	return strip
+end
+
+function U:ApplySideStripTheme()
+	local strip = self.sideStrip
+	if not strip then return end
+	local ar, ag, ab = XComp.GetAccentColor()
+	if IsFrameless() then
+		strip:SetBackdropColor(0, 0, 0, 0)
+		strip:SetBackdropBorderColor(0, 0, 0, 0)
+	else
+		local br, bg, bb = XComp.GetBgColor()
+		strip:SetBackdropColor(br, bg, bb, GetBgAlpha())
+		strip:SetBackdropBorderColor(ar, ag, ab, 1)
+	end
+end
+
+local function MakeSideIcon(strip, texture, anchorTo)
+	local btn = CreateFrame("Button", nil, strip)
+	btn:SetSize(SIDE_ICON_SIZE, SIDE_ICON_SIZE)
+	if anchorTo then
+		btn:SetPoint("TOP", anchorTo, "BOTTOM", 0, -SIDE_ICON_GAP)
+	else
+		btn:SetPoint("TOP", strip, "TOP", 0, -8)
+	end
+	local icon = btn:CreateTexture(nil, "ARTWORK")
+	icon:SetAllPoints()
+	if texture then icon:SetTexture(texture) end
+	btn.icon = icon
+	btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+
+	-- HookScript, not SetScript - every caller sets its own OnEnter/OnLeave
+	-- for the tooltip right after this returns, which would otherwise wipe
+	-- out a plain SetScript here. Hooked scripts run alongside whatever the
+	-- caller sets later, so this survives (2026-08-16 fix: the strip's own
+	-- parent-level OnEnter wasn't reliably keeping the window visible while
+	-- actually hovering an icon button on top of it - wiring it directly to
+	-- every button removes that dependency entirely).
+	btn:HookScript("OnEnter", function() U:HandleHoverEnter() end)
+	btn:HookScript("OnLeave", function() U:HandleHoverLeave() end)
+
+	return btn
+end
+
+-- Rebuilds the icon list (vault + whichever currencies are tracked) - cheap
+-- enough to just do a full rebuild alongside RefreshSections rather than
+-- diffing, same approach the main content list already uses.
+function U:RefreshSideStrip()
+	local strip = self:CreateSideStrip()
+	self:ApplySideStripTheme()
+
+	if not IsSideStripEnabled() then
+		strip:Hide()
+		return
+	end
+	strip:Show()
+
+	for _, btn in ipairs(strip.icons) do
+		btn:Hide()
+		btn:SetParent(nil)
+	end
+	strip.icons = {}
+
+	local anchorTo = nil
+
+	local vaultLines = XComp.Data:GetVaultProgress()
+	if #vaultLines > 0 then
+		local vaultBtn = MakeSideIcon(strip, nil, anchorTo)
+		-- Gold/unlocked variant (2026-08-16 correction) - the gray "locked"
+		-- atlas read as a dim, washed-out icon. Real atlas either way, from
+		-- Blizzard's own Blizzard_WeeklyRewards.lua source.
+		vaultBtn.icon:SetAtlas("evergreen-weeklyrewards-reward-unlocked")
+		vaultBtn:SetScript("OnClick", function()
+			if not C_AddOns.IsAddOnLoaded("Blizzard_WeeklyRewards") then
+				C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
+			end
+			if WeeklyRewardsFrame:IsShown() then
+				WeeklyRewardsFrame:Hide()
+			else
+				WeeklyRewardsFrame:Show()
+			end
+		end)
+		vaultBtn:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			GameTooltip:SetText("Great Vault")
+			for _, v in ipairs(vaultLines) do
+				local vaultText = string.format("%s: %d/%d%s", v.label, v.progress, v.threshold, v.filled and " (filled)" or "")
+				GameTooltip:AddLine(vaultText, 1, 1, 1)
+			end
+			GameTooltip:Show()
+		end)
+		vaultBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		table.insert(strip.icons, vaultBtn)
+		anchorTo = vaultBtn
+	end
+
+	local currencyLines = XComp.Data:GetTrackedCurrencies()
+	for _, c in ipairs(currencyLines) do
+		local curBtn = MakeSideIcon(strip, c.iconFileID, anchorTo)
+		curBtn:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+			local curText
+			if c.canEarnPerWeek and c.maxWeeklyQuantity and c.maxWeeklyQuantity > 0 then
+				curText = string.format("%s: %d (%d/%d this week)", c.name, c.quantity, c.quantityEarnedThisWeek or 0, c.maxWeeklyQuantity)
+			else
+				curText = string.format("%s: %d", c.name, c.quantity)
+			end
+			GameTooltip:SetText(curText)
+			GameTooltip:Show()
+		end)
+		curBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+		table.insert(strip.icons, curBtn)
+		anchorTo = curBtn
+	end
+
+	local iconCount = #strip.icons
+	if iconCount == 0 then
+		strip:Hide()
+	else
+		strip:Show()
+		strip:SetHeight(8 + (iconCount * SIDE_ICON_SIZE) + ((iconCount - 1) * SIDE_ICON_GAP) + 8)
+	end
 end
 
 -------------------------------------------------
@@ -629,25 +922,16 @@ end
 -- Section tree rendering
 -------------------------------------------------
 local ROW_H = 26
-local INDENT_TIER, INDENT_TYPE, INDENT_CATEGORY, INDENT_ITEM = 0, 14, 28, 42
+-- Two levels now: a flat section header (zone or category name) and its
+-- items - the old Tier/Type/Category nesting is gone (rebuilt 2026-08-15).
+local INDENT_TIER, INDENT_TYPE = 0, 14
 
--- Collapse state for the top-level Currencies section (build-plan item 14)
--- - a sibling of Current/Legacy, not nested under Daily/Weekly, since
--- Great Vault progress and currency amounts aren't daily/weekly quest
--- items. Same "resets each session" behavior as tier/type/category
--- collapse state (those live on the catalog objects, rebuilt fresh on
--- every login rather than persisted).
-local currenciesSectionCollapsed = true
-local vaultSubCollapsed = true
-local currencyListSubCollapsed = true
-
--- Right-click on an item row (or a color-enabled header) to color-code it
--- (native ColorPickerFrame, current post-10.2.5 API -
--- SetupColorPickerAndShow, not the old deprecated OpenColorPicker global).
--- Colors are account-wide cosmetic prefs, cleared via "Reset to Defaults"
--- in Options.lua. Declared here, BEFORE MakeCollapseHeader/MakeItemRow
--- below, since both call it and Lua locals are only visible after their
--- declaration point.
+-- Right-click on an item row to color-code it (native ColorPickerFrame,
+-- current post-10.2.5 API - SetupColorPickerAndShow, not the old
+-- deprecated OpenColorPicker global). Colors are account-wide cosmetic
+-- prefs, cleared via "Reset to Defaults" in Options.lua. Declared here,
+-- BEFORE MakeItemRow below, since it calls this and Lua locals are only
+-- visible after their declaration point.
 local function OpenItemColorPicker(item, label)
 	local r, g, b = XComp.Data:GetItemColor(item.uid)
 	r, g, b = r or 1, g or 1, b or 1
@@ -668,45 +952,129 @@ local function OpenItemColorPicker(item, label)
 	})
 end
 
--- colorKey is optional - when given, right-click opens the same color
--- picker used for items, so this header's label can be custom-colored too
--- (currently used for the Daily/Weekly/One-time type headers specifically,
--- per user request - reuses Data.lua's generic per-uid color storage with
--- a "type:" prefix so these never collide with real item uids).
-local function MakeCollapseHeader(parent, text, indent, isCollapsed, onToggle, colorKey)
-	local btn = CreateFrame("Button", nil, parent)
-	btn:SetHeight(ROW_H)
+-- Zone-grouping redesign (2026-08-15, per the approved mockup) - one fixed
+-- color per named zone, shown as the header's left-edge bar - not cycled/
+-- assigned automatically, so a given zone always reads the same color
+-- across sessions.
+local ZONE_COLORS = {
+	["Eversong Woods"] = { 0.30, 0.62, 0.86 },
+	["Zul'Aman"] = { 0.75, 0.32, 0.32 },
+	["Voidstorm"] = { 0.55, 0.40, 0.85 },
+	["The Coiled Isle"] = { 0.35, 0.68, 0.45 },
+	["Vaults of Atal'Utek"] = { 0.68, 0.45, 0.85 },
+	["Housing"] = { 0.85, 0.45, 0.60 },
+	["Silvermoon City"] = { 0.82, 0.68, 0.25 },
+	["Legacy"] = { 0.55, 0.55, 0.55 },
+}
+local ZONE_COLOR_DEFAULT = { 0.60, 0.60, 0.60 }
 
-	local arrow = btn:CreateFontString(nil, "OVERLAY")
-	arrow:SetFontObject(XComp.TitleFont)
-	arrow:SetPoint("LEFT", btn, "LEFT", indent, 0)
-	arrow:SetText(isCollapsed and ">" or "v")
-	btn.arrow = arrow
+local function GetZoneColor(zoneName)
+	return unpack(ZONE_COLORS[zoneName] or ZONE_COLOR_DEFAULT)
+end
 
-	local label = btn:CreateFontString(nil, "OVERLAY")
-	label:SetFontObject(XComp.TitleFont)
-	label:SetPoint("LEFT", arrow, "RIGHT", 4, 0)
-	label:SetPoint("RIGHT", btn, "RIGHT", 0, 0)
+-- Collapse state per zone/group name - real sections now (2026-08-15,
+-- confirmed spec: "Sections are by definition collapsed... I want it to be
+-- clean"), collapsed by default. Module-level (not persisted), same as the
+-- old tier/type/category collapse state used to work, just keyed by name
+-- instead of living on a catalog object (zone groups aren't catalog nodes).
+local sectionCollapsed = {}
+local function IsSectionCollapsed(name)
+	if sectionCollapsed[name] == nil then sectionCollapsed[name] = true end
+	return sectionCollapsed[name]
+end
+
+local function MakeZoneHeader(parent, indent, zoneName, completed, total, onToggle)
+	local row = CreateFrame("Button", nil, parent)
+	row:SetHeight(ROW_H)
+
+	local zr, zg, zb = GetZoneColor(zoneName)
+
+	local bar = row:CreateTexture(nil, "ARTWORK")
+	bar:SetPoint("TOPLEFT", row, "TOPLEFT", indent, 0)
+	bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", indent, 0)
+	bar:SetWidth(3)
+	bar:SetColorTexture(zr, zg, zb, 1)
+
+	local labelLeftAnchor = bar
+
+	local label = row:CreateFontString(nil, "OVERLAY")
+	label:SetFontObject(XComp.BodyFont)
+	label:SetPoint("LEFT", labelLeftAnchor, "RIGHT", 6, 0)
 	label:SetJustifyH("LEFT")
+	label:SetText(zoneName)
+	label:SetTextColor(zr, zg, zb, 1)
+
+	if total then
+		local countText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		countText:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+		countText:SetText(string.format("%d/%d", completed, total))
+	end
+
+	row:SetScript("OnClick", function()
+		sectionCollapsed[zoneName] = not IsSectionCollapsed(zoneName)
+		if onToggle then onToggle() end
+	end)
+
+	return row
+end
+
+-- Manual-completion confirm popup (2026-08-15 correction: the inline
+-- checkbox on every row is gone - "one of the pet peeves I have"). Clicking
+-- an item's name opens this instead: a small "Complete?" window with a
+-- checkbox inside it, so marking something done manually is a deliberate
+-- two-step action, not a single click sitting right there in the list.
+-- Strikethrough (via MakeItemRow's own text styling) is still what shows
+-- completion at a glance - this popup is only the INPUT, not the display.
+-- One shared frame, repositioned per click, rather than building a new
+-- frame every time.
+local completePopup
+
+local function GetCompletePopup()
+	if completePopup then return completePopup end
+
+	local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+	popup:SetSize(150, 50)
+	popup:SetFrameStrata("TOOLTIP")
+	popup:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8x8",
+		edgeFile = "Interface\\Buttons\\WHITE8x8",
+		edgeSize = 1,
+	})
+	local br, bg, bb = XComp.GetBgColor()
+	popup:SetBackdropColor(br, bg, bb, 0.98)
 	local ar, ag, ab = XComp.GetAccentColor()
-	if colorKey then
-		local cr, cg, cbb = XComp.Data:GetItemColor(colorKey)
-		if cr then ar, ag, ab = cr, cg, cbb end
-	end
+	popup:SetBackdropBorderColor(ar, ag, ab, 1)
+
+	local label = popup:CreateFontString(nil, "OVERLAY")
+	label:SetFontObject(XComp.BodyFont)
+	label:SetPoint("TOP", popup, "TOP", 0, -10)
+	label:SetText("Complete?")
 	label:SetTextColor(ar, ag, ab, 1)
-	label:SetText(text)
+	popup.label = label
 
-	btn:SetScript("OnClick", onToggle)
+	local cb = XComp.MakeCheckbox(popup, 20)
+	cb:SetPoint("TOP", label, "BOTTOM", 0, -8)
+	popup.checkbox = cb
 
-	if colorKey then
-		btn:SetScript("OnMouseUp", function(_, button)
-			if button == "RightButton" then
-				OpenItemColorPicker({ uid = colorKey }, label)
-			end
-		end)
+	popup:Hide()
+	completePopup = popup
+	return popup
+end
+
+local function ShowCompletePopup(anchorFrame, item, resetEpoch)
+	local popup = GetCompletePopup()
+	popup:ClearAllPoints()
+	popup:SetPoint("TOP", anchorFrame, "BOTTOM", 0, -2)
+
+	local complete = XComp.Data:GetItemStatus(item, resetEpoch)
+	popup.checkbox:SetChecked(complete)
+	popup.checkbox.OnToggle = function(self)
+		XComp.Data:SetManualOverride(item.uid, self:GetChecked() and true or false, resetEpoch)
+		popup:Hide()
+		XComp.UI:RefreshSections()
 	end
 
-	return btn
+	popup:Show()
 end
 
 local function MakeItemRow(parent, item, indent, resetEpoch)
@@ -714,16 +1082,12 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	row:SetHeight(ROW_H)
 	row:EnableMouse(true)
 
-	local cb = XComp.MakeCheckbox(row, 18)
-	cb:SetPoint("LEFT", row, "LEFT", indent, 0)
-
 	local label = row:CreateFontString(nil, "OVERLAY")
 	label:SetFontObject(XComp.BodyFont)
-	label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+	label:SetPoint("LEFT", row, "LEFT", indent, 0)
 	label:SetJustifyH("LEFT")
 
 	local complete, numFulfilled, numRequired = XComp.Data:GetItemStatus(item, resetEpoch)
-	cb:SetChecked(complete)
 
 	local text = item.name
 	if numFulfilled and numRequired then
@@ -731,8 +1095,46 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	end
 	label:SetText(text)
 
+	-- Color priority: per-item custom color, then complete (dimmed gray +
+	-- strikethrough), then active rotating/task-quest content (whole name
+	-- turns green - only meaningful for rotating content, which is
+	-- otherwise hidden entirely while offline this cycle, so anything shown
+	-- here that isn't complete is, by definition, live right now).
 	local cr, cg, cb2 = XComp.Data:GetItemColor(item.uid)
-	if cr then label:SetTextColor(cr, cg, cb2, 1) end
+	if cr then
+		label:SetTextColor(cr, cg, cb2, 1)
+	elseif complete then
+		label:SetTextColor(0.42, 0.40, 0.36, 1)
+	elseif item.isRotating or item.questIDs then
+		label:SetTextColor(0.35, 0.85, 0.40, 1)
+	end
+
+	-- Strikethrough (2026-08-15 correction: the inline checkbox is gone, so
+	-- this is now the ONLY at-a-glance completion signal). WoW FontStrings
+	-- have no native strikethrough - a thin texture line drawn across the
+	-- text's own measured width, vertically centered, fakes it.
+	local strikeLine
+	if complete then
+		strikeLine = row:CreateTexture(nil, "OVERLAY")
+		-- Plain SetHeight(1) doesn't pixel-snap, so it rendered as a thick
+		-- blurry bar instead of a true thin line (2026-08-16 correction) -
+		-- PixelUtil.SetHeight is what every other thin line in this addon
+		-- already uses (checkbox borders, dividers) for exactly this reason.
+		PixelUtil.SetHeight(strikeLine, 1)
+		strikeLine:SetColorTexture(0.42, 0.40, 0.36, 1)
+		-- A LEFT anchor on a FontString centers against its full line-height
+		-- box (ascender/descender padding included), NOT the actual glyph
+		-- ink - same root cause already documented on the checkbox's
+		-- checkmark texture above. That left the line sitting in the gap
+		-- below the letters instead of through them. Offsetting down from
+		-- TOP by ~42% of the font's point size lands it through the
+		-- letters' visual middle instead.
+		local fontSize = select(2, label:GetFont()) or 12
+		PixelUtil.SetPoint(strikeLine, "TOPLEFT", label, "TOPLEFT", 0, -(fontSize * 0.42))
+		strikeLine:SetWidth(math.max(label:GetStringWidth(), 1))
+	end
+
+	local rightAnchor = row
 
 	-- TomTom waypoint button (build-plan item 11) - only shown for items
 	-- with a real questID, since C_QuestLog.GetNextWaypoint needs one.
@@ -743,7 +1145,11 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	if item.questID then
 		local mapBtn = CreateFrame("Button", nil, row)
 		mapBtn:SetSize(16, ROW_H)
-		mapBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+		if rightAnchor == row then
+			mapBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+		else
+			mapBtn:SetPoint("RIGHT", rightAnchor, "LEFT", -6, 0)
+		end
 		local mapLabel = mapBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		mapLabel:SetPoint("CENTER")
 		mapLabel:SetText("Map")
@@ -762,42 +1168,22 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 				print("|cffEBB706Xal's Compendium|r: no waypoint available for " .. item.name .. " right now.")
 			end
 		end)
-		label:SetPoint("RIGHT", mapBtn, "LEFT", -4, 0)
+		rightAnchor = mapBtn
+	end
+	if rightAnchor ~= row then
+		label:SetPoint("RIGHT", rightAnchor, "LEFT", -4, 0)
 	end
 
-	cb.OnToggle = function(self)
-		XComp.Data:SetManualOverride(item.uid, self:GetChecked() and true or false, resetEpoch)
-		-- Without this, the checkbox's own checked state flips (native
-		-- behavior) but nothing else does - counts, smart sorting, and the
-		-- overall total all stay stale until something unrelated happens to
-		-- trigger a full refresh. A checkbox click needs to redraw the list.
-		XComp.UI:RefreshSections()
-	end
-
-	-- CheckButton only registers left-click by default, so a right-click
-	-- anywhere on the row (including over the checkbox) passes through to
-	-- this handler untouched.
+	-- Left-click the name to open the manual-completion confirm popup;
+	-- right-click still opens the color picker, same as before.
 	row:SetScript("OnMouseUp", function(_, button)
 		if button == "RightButton" then
 			OpenItemColorPicker(item, label)
+		else
+			ShowCompletePopup(row, item, resetEpoch)
 		end
 	end)
 
-	return row
-end
-
--- Read-only line (no checkbox) for live-generated info that isn't a
--- checkable item - Great Vault progress and tracked currency amounts
--- (build-plan item 14).
-local function MakeInfoRow(parent, indent, text)
-	local row = CreateFrame("Frame", nil, parent)
-	row:SetHeight(ROW_H)
-	local label = row:CreateFontString(nil, "OVERLAY")
-	label:SetFontObject(XComp.BodyFont)
-	label:SetPoint("LEFT", row, "LEFT", indent, 0)
-	label:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-	label:SetJustifyH("LEFT")
-	label:SetText(text)
 	return row
 end
 
@@ -812,6 +1198,20 @@ local function RenderItemTree(container, item, indent, resetEpoch, hideCompleted
 	-- recursive children, one check point instead of duplicating it at
 	-- every call site).
 	if not XComp.Data:IsWithinActiveWindow(item) then return end
+
+	-- Rotating content (isRotating flag, or a questIDs pool like the
+	-- dungeon board/Showdown zones) only shows when it's genuinely live
+	-- this cycle - hides the "every possible option shown at once" mess
+	-- this whole redesign started from. NEVER hides something already
+	-- completed this cycle - a finished Void Assault should still show
+	-- checked off, not vanish just because its offer window closed after
+	-- you turned it in.
+	if item.isRotating or item.questIDs then
+		local isComplete = XComp.Data:GetItemStatus(item, resetEpoch)
+		if not isComplete and not XComp.Data:IsItemActive(item) then
+			return
+		end
+	end
 
 	placeFn(MakeItemRow(container, item, indent, resetEpoch))
 
@@ -860,104 +1260,52 @@ function U:RefreshSections()
 	local overallCompleted, overallTotal = 0, 0
 	local hideCompleted = XComp_DB.settings and XComp_DB.settings.hideCompleted
 
-	-- Tier is the new outermost level (Current/Legacy) - added 2026-08-08,
-	-- replacing the old flat type-list-at-top-level structure. Type keys
-	-- are shared across tiers (see Options.lua), so IsTypeEnabled applies
-	-- identically inside both.
+	-- Full rebuild 2026-08-15 to match the approved mockup exactly: the old
+	-- Tier(Current/Legacy) > Type(Daily/Weekly/One-time) > Category
+	-- collapsible-arrow tree is gone completely, not extended. Every
+	-- enabled type across both tiers is still walked once (that's what
+	-- keeps counts/streaks correct), but nothing from that walk renders a
+	-- header - it only collects items into flat, named groups. A real zone
+	-- tag groups an item under its zone (colored bar + icon); anything
+	-- without one groups under its category label instead, so nothing
+	-- vanishes just because it hasn't been zone-tagged yet.
+	local ZONE_RENDER_ORDER = {
+		"Eversong Woods", "Zul'Aman", "Voidstorm", "The Coiled Isle",
+		"Vaults of Atal'Utek", "Housing", "Legacy",
+	}
+	local groupOrder, groups = {}, {}
+	local function GetGroup(name)
+		if not groups[name] then
+			groups[name] = {}
+			table.insert(groupOrder, name)
+		end
+		return groups[name]
+	end
+
+	-- The selected tab (Daily/Weekly/Legacy) picks which tier+type(s) get
+	-- walked - "daily"/"weekly" are the Current tier's matching type only;
+	-- "legacy" pulls every type under the Legacy tier combined (that tier's
+	-- content is small enough it doesn't need its own Daily/Weekly split).
+	-- The subtitle count is scoped to this same selection, matching the
+	-- mockup ("Weekly - 5/30 complete", not a combined grand total).
+	local selectedType = (XComp_DB.settings and XComp_DB.settings.selectedType) or "weekly"
 	for _, tier in ipairs(XComp.Data.Catalog.tiers) do
-		local tierCompleted, tierTotal = XComp.Data:CountTier(tier)
-		overallCompleted = overallCompleted + tierCompleted
-		overallTotal = overallTotal + tierTotal
+		local tierMatches = (selectedType == "legacy" and tier.key == "legacy")
+			or (selectedType ~= "legacy" and tier.key == "current")
+		if tierMatches then
+			for _, typeSection in ipairs(XComp.Options:GetOrderedTypes(tier)) do
+				if XComp.Options:IsTypeEnabled(typeSection.key)
+					and (selectedType == "legacy" or typeSection.key == selectedType) then
+					local resetEpoch = XComp.Data:GetResetEpoch(typeSection.resetType)
+					local typeCompleted, typeTotal = XComp.Data:CountType(typeSection)
+					XComp.Data:UpdateStreak(tier.key, typeSection, resetEpoch, typeCompleted, typeTotal)
+					overallCompleted = overallCompleted + typeCompleted
+					overallTotal = overallTotal + typeTotal
 
-		if not (hideCompleted and tierCompleted == tierTotal and tierTotal > 0) then
-			local tierText = string.format("%s (%d/%d)", tier.label, tierCompleted, tierTotal)
-			local tierHeader = MakeCollapseHeader(container, tierText, INDENT_TIER, tier.collapsed, function()
-				tier.collapsed = not tier.collapsed
-				self:RefreshSections()
-			end)
-			PlaceRow(tierHeader)
-
-			if not tier.collapsed then
-				-- Reorder position/arrow-availability is computed against
-				-- only the ENABLED types, not the raw saved order - a
-				-- disabled (toggled-off) type is invisible, so it shouldn't
-				-- eat a reorder click doing nothing, or block a visible type
-				-- from showing it can still move further.
-				local visibleTypes = {}
-				for _, t in ipairs(XComp.Options:GetOrderedTypes(tier)) do
-					if XComp.Options:IsTypeEnabled(t.key) then table.insert(visibleTypes, t) end
-				end
-				for typeIndex, typeSection in ipairs(visibleTypes) do
-					do
-						-- Computed once per type (not per item) - every item
-						-- under this type shares the same reset cycle.
-						local resetEpoch = XComp.Data:GetResetEpoch(typeSection.resetType)
-
-						local typeCompleted, typeTotal = XComp.Data:CountType(typeSection)
-						XComp.Data:UpdateStreak(tier.key, typeSection, resetEpoch, typeCompleted, typeTotal)
-
-						-- With the filter on, a type with nothing left to show
-						-- (every item across every category already complete)
-						-- is skipped entirely rather than showing an empty,
-						-- pointless header.
-						if not (hideCompleted and typeCompleted == typeTotal and typeTotal > 0) then
-							local typeText = string.format("%s (%d/%d)", typeSection.label, typeCompleted, typeTotal)
-							local streakCurrent, streakBest = XComp.Data:GetStreak(tier.key, typeSection.key)
-							if streakCurrent then
-								typeText = typeText .. string.format(" - streak %d/%d", streakCurrent, streakBest)
-							end
-							-- colorKey shared across both tiers (same "type:daily"
-							-- regardless of Current/Legacy), matching how the
-							-- enable/disable toggle already treats a type as one
-							-- thing that happens to appear under both tiers.
-							local typeHeader = MakeCollapseHeader(container, typeText, INDENT_TYPE, typeSection.collapsed, function()
-								typeSection.collapsed = not typeSection.collapsed
-								self:RefreshSections()
-							end, "type:" .. typeSection.key)
-							PlaceRow(typeHeader)
-
-							if not typeSection.collapsed then
-								local orderedCategories = XComp.Options:GetOrderedCategories(typeSection)
-								for catIndex, category in ipairs(orderedCategories) do
-									local catCompleted, catTotal = XComp.Data:CountCategory(category, resetEpoch)
-
-									if not (hideCompleted and catCompleted == catTotal and catTotal > 0) then
-										local catText = string.format("%s (%d/%d)", category.label, catCompleted, catTotal)
-										local catHeader = MakeCollapseHeader(container, catText, INDENT_CATEGORY, category.collapsed, function()
-											category.collapsed = not category.collapsed
-											self:RefreshSections()
-										end)
-										PlaceRow(catHeader)
-
-										if not category.collapsed then
-											-- Smart sorting: completed items sink to the
-											-- bottom, incomplete ones stay on top - always
-											-- on, not a toggle. Two-pass split preserves
-											-- each group's original relative order
-											-- (stable), rather than relying on
-											-- table.sort's unstable ordering.
-											local incompleteItems, completedItems = {}, {}
-											for _, item in ipairs(category.items) do
-												local isComplete = XComp.Data:GetItemStatus(item, resetEpoch)
-												if isComplete then
-													table.insert(completedItems, item)
-												else
-													table.insert(incompleteItems, item)
-												end
-											end
-
-											for _, item in ipairs(incompleteItems) do
-												RenderItemTree(container, item, INDENT_ITEM, resetEpoch, hideCompleted, PlaceRow)
-											end
-											if not hideCompleted then
-												for _, item in ipairs(completedItems) do
-													RenderItemTree(container, item, INDENT_ITEM, resetEpoch, hideCompleted, PlaceRow)
-												end
-											end
-										end
-									end
-								end
-							end
+					for _, category in ipairs(XComp.Options:GetOrderedCategories(typeSection)) do
+						for _, item in ipairs(category.items) do
+							local groupName = item.zone or category.label
+							table.insert(GetGroup(groupName), { item = item, resetEpoch = resetEpoch })
 						end
 					end
 				end
@@ -965,62 +1313,59 @@ function U:RefreshSections()
 		end
 	end
 
-	-- Currencies (build-plan item 14) - own top-level section, sibling to
-	-- Current/Legacy, per explicit user request: Great Vault progress and
-	-- tracked currency amounts aren't daily/weekly quest items, so they
-	-- don't belong three levels deep under a specific type.
-	do
-		local currenciesHeader = MakeCollapseHeader(container, "Currencies", INDENT_TIER, currenciesSectionCollapsed, function()
-			currenciesSectionCollapsed = not currenciesSectionCollapsed
+	-- Completed items sink to the bottom within a group, always on (not a
+	-- toggle) - same behavior the old tree had, just one flat level now
+	-- instead of buried under Tier > Type > Category.
+	local function RenderGroup(groupName, entries)
+		local incomplete, completed = {}, {}
+		for _, e in ipairs(entries) do
+			local isComplete = XComp.Data:GetItemStatus(e.item, e.resetEpoch)
+			local isHiddenRotation = (e.item.isRotating or e.item.questIDs)
+				and not isComplete and not XComp.Data:IsItemActive(e.item)
+			if not isHiddenRotation then
+				if isComplete then
+					table.insert(completed, e)
+				else
+					table.insert(incomplete, e)
+				end
+			end
+		end
+		local groupTotal = #incomplete + #completed
+		if groupTotal == 0 then return end
+		if hideCompleted and #incomplete == 0 then return end
+
+		PlaceRow(MakeZoneHeader(container, INDENT_TIER, groupName, #completed, groupTotal, function()
 			self:RefreshSections()
-		end)
-		PlaceRow(currenciesHeader)
+		end))
 
-		if not currenciesSectionCollapsed then
-			local vaultHeader = MakeCollapseHeader(container, "Great Vault", INDENT_TYPE, vaultSubCollapsed, function()
-				vaultSubCollapsed = not vaultSubCollapsed
-				self:RefreshSections()
-			end)
-			PlaceRow(vaultHeader)
-
-			if not vaultSubCollapsed then
-				local vaultLines = XComp.Data:GetVaultProgress()
-				if #vaultLines == 0 then
-					PlaceRow(MakeInfoRow(container, INDENT_ITEM, "No active Great Vault progress this week."))
-				else
-					for _, v in ipairs(vaultLines) do
-						local vaultText = string.format("%s: %d/%d%s", v.label, v.progress, v.threshold, v.filled and " (filled)" or "")
-						PlaceRow(MakeInfoRow(container, INDENT_ITEM, vaultText))
-					end
-				end
+		if not IsSectionCollapsed(groupName) then
+			for _, e in ipairs(incomplete) do
+				RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow)
 			end
-
-			local currencyHeader = MakeCollapseHeader(container, "Tracked Currencies", INDENT_TYPE, currencyListSubCollapsed, function()
-				currencyListSubCollapsed = not currencyListSubCollapsed
-				self:RefreshSections()
-			end)
-			PlaceRow(currencyHeader)
-
-			if not currencyListSubCollapsed then
-				local currencyLines = XComp.Data:GetTrackedCurrencies()
-				if #currencyLines == 0 then
-					PlaceRow(MakeInfoRow(container, INDENT_ITEM, "No currencies picked yet - Options -> Currencies."))
-				else
-					for _, c in ipairs(currencyLines) do
-						local curText
-						if c.canEarnPerWeek and c.maxWeeklyQuantity and c.maxWeeklyQuantity > 0 then
-							curText = string.format("%s: %d (%d/%d this week)", c.name, c.quantity, c.quantityEarnedThisWeek or 0, c.maxWeeklyQuantity)
-						else
-							curText = string.format("%s: %d", c.name, c.quantity)
-						end
-						PlaceRow(MakeInfoRow(container, INDENT_ITEM, curText))
-					end
+			if not hideCompleted then
+				for _, e in ipairs(completed) do
+					RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow)
 				end
 			end
 		end
 	end
 
-	f.overallLabel:SetText(string.format("%d / %d complete", overallCompleted, overallTotal))
+	for _, zoneName in ipairs(ZONE_RENDER_ORDER) do
+		if groups[zoneName] then
+			RenderGroup(zoneName, groups[zoneName])
+			groups[zoneName] = nil
+		end
+	end
+	for _, groupName in ipairs(groupOrder) do
+		if groups[groupName] then
+			RenderGroup(groupName, groups[groupName])
+		end
+	end
+
+	local viewLabels = { daily = "Daily", weekly = "Weekly", legacy = "Legacy" }
+	f.overallLabel:SetText(string.format("%s - %d/%d complete", viewLabels[selectedType], overallCompleted, overallTotal))
+	if f.RefreshTabHighlight then f.RefreshTabHighlight() end
+	self:RefreshSideStrip()
 	self:ApplyMinimizedState()
 
 	-- Scroll child height must always match actual content, regardless of
@@ -1037,7 +1382,7 @@ function U:RefreshSections()
 	-- simply scrolls within the window instead of growing it further.
 	local autoSize = not (XComp_DB.settings and XComp_DB.settings.autoSize == false)
 	if autoSize and not (XComp_DB.settings and XComp_DB.settings.minimized) then
-		local HEADER_AND_FOOTER = 148 -- top offset (68) + icon row (24) + icon row gap (8) + content gap (8) + bottom padding (40)
+		local HEADER_AND_FOOTER = 154 -- top offset (68) + tab row (20) + tab row gap (8) + content gap (8) + bottom padding (40) + border padding (10)
 		local minH, maxH = 200, 800
 		local targetH = HEADER_AND_FOOTER + contentHeight
 		if targetH < minH then targetH = minH end
@@ -1045,13 +1390,12 @@ function U:RefreshSections()
 		f:SetHeight(targetH)
 	end
 
+	if f.UpdateScrollRange then f.UpdateScrollRange() end
+
 	-- Keeps this character's alt-roster snapshot (build-plan item 19)
 	-- current through the session, not just at login - cheap since
-	-- CountType is already computed for the header counts above.
+	-- CountType is already computed for the header counts above. This is
+	-- also now the ONLY thing that updates it - the manual refresh button
+	-- was removed 2026-08-15 as redundant with this call.
 	XComp.Data:UpdateRosterSnapshot()
-
-	if f.ilvlText then
-		local _, avgEquipped = GetAverageItemLevel()
-		f.ilvlText:SetText(string.format("ilvl %d", math.floor(avgEquipped or 0)))
-	end
 end
