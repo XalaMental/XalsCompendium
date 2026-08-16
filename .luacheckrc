@@ -45,6 +45,7 @@ read_globals = {
     "C_WeeklyRewards",
     "C_CurrencyInfo",
     "C_Reputation",
+    "C_TaskQuest",
     "time",
     "date",
     "Enum",
