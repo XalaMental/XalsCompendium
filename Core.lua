@@ -180,6 +180,12 @@ function XComp.MakeCheckbox(parent, size)
 	local cb = CreateFrame("Button", nil, parent)
 	PixelUtil.SetSize(cb, size, size)
 
+	-- Matches Quest Compass's Brand.MakeCheckbox exactly (2026-08-15
+	-- correction - checked its real BrandStyle.lua: identical 4-texture
+	-- border, same 2px LINE_THICKNESS floor, same 0.6 bg alpha). The
+	-- checkbox was never actually "too thick" relative to the real
+	-- reference addon - only relative to the mockup's browser-rendered
+	-- checkbox, which no real addon in the suite matches.
 	local bg = cb:CreateTexture(nil, "BACKGROUND")
 	bg:SetAllPoints()
 	bg:SetColorTexture(0.1, 0.1, 0.1, 0.6)
@@ -319,33 +325,23 @@ f:SetScript("OnEvent", function(_, event, ...)
 		-- once the hidden slash command has switched it on for this
 		-- account. Delayed half a second - the quest log isn't always
 		-- fully populated the instant ADDON_LOADED fires.
+		--
+		-- NO LONGER auto-injects into the live tracker's "Custom" category
+		-- (2026-08-16 correction - redundant with, and confusing next to,
+		-- the separate Untracked Export report button that already exists
+		-- for reviewing these; detected quests still populate that report,
+		-- they just don't also clutter the real visible list anymore).
 		if XComp.IsDevMode() then
 			C_Timer.After(0.5, function()
-				local found = XComp.Data:ScanQuestLogForUntracked()
-				XComp.Data:InjectAutoDetectedItems()
-				if #found > 0 then
-					if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
-						XComp.UI:RefreshSections()
-					end
-					XComp.UI:ShowCompletionToast(string.format(
-						"Added %d new repeatable quest%s to the tracker (Custom category)",
-						#found, #found > 1 and "s" or ""))
-				end
+				XComp.Data:ScanQuestLogForUntracked()
 			end)
 		end
 	elseif event == "QUEST_ACCEPTED" then
 		-- Live catch for anything accepted DURING this session, same
-		-- detection + auto-add as the login scan above - dev-only, same gate.
+		-- detection as the login scan above - dev-only, same gate.
 		if not XComp.IsDevMode() then return end
 		local questID = ...
-		local isNew, name, frequency = XComp.Data:CheckQuestForCatalog(questID)
-		if isNew then
-			XComp.Data:InjectAutoDetectedItems()
-			if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
-				XComp.UI:RefreshSections()
-			end
-			XComp.UI:ShowCompletionToast("Added new " .. frequency .. " quest to the tracker: " .. name)
-		end
+		XComp.Data:CheckQuestForCatalog(questID)
 	elseif event == "QUEST_TURNED_IN" then
 		-- Completion popup while the window's closed (build-plan item 10) -
 		-- match the turned-in quest against the catalog; if it's a tracked
