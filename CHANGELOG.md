@@ -1,24 +1,41 @@
 # Xal's Compendium - Changelog
 
+## 2.0.1 - August 16, 2026
+
+---
+
+Fixed a few things that turned up right after 2.0.0 shipped. Right-click on a quest used to open a color picker - never something I actually intended, so that's gone, and right-click now opens the quest's real quest log entry instead. The "Complete?" popup had two bugs: it could get stuck floating on screen after closing the tracker, and clicking a quest a second time couldn't close it. Both fixed. Fade delay is also longer now so the window doesn't vanish the second your mouse drifts off it.
+
+### 🔧 Changed
+- **Right-click a quest to open its real quest log entry** instead of a color picker.
+- Click a quest's name again to close the "Complete?" popup, instead of only ever being able to open it.
+- Longer idle fade delay.
+
+### 🐛 Fixed
+- The "Complete?" popup no longer gets stuck floating on screen after you close or refresh the tracker.
+- The popup's checkbox no longer runs off its own bottom edge.
+
+---
+
 ## 2.0.0 - August 16, 2026
 
 ---
 
-This one turned into a full rebuild of the main tracker, not just a tweak. I looked at where things stood and it just didn't match the clean look I actually wanted - too much nested clicking to get to anything, a checkbox on every line that always bugged me, and Great Vault/currency info sitting in the middle of my quest list when it's really its own separate thing. So I tore out the old nested menu system and reorganized everything by zone instead - click a zone, see what's there. Checkboxes are gone too; you just click the quest name now. Great Vault and currencies moved to their own little icon panel next to the window so they're not cluttering the actual quest list. Also fixed a real bug where quests I'd already added to the catalog kept showing up as "new" in the detection report.
+This one turned into a full rebuild of the main tracker, not just a tweak. Too much nested clicking, a checkbox on every line that always bugged me, and Great Vault/currency info cluttering the quest list. So it's reorganized by zone now, checkboxes are gone, and Great Vault/currencies got their own little panel.
 
 ### 🆕 New
-- **Zone-organized tracker** - the old Current/Legacy -> Daily/Weekly -> Category menu tree is gone. The tracker is now a flat list of zone sections (Eversong Woods, Zul'Aman, Vaults of Atal'Utek, and so on) - click a zone to expand it, collapsed by default for a clean starting view.
-- **Great Vault & currencies panel** - your Great Vault progress and tracked currencies now live in their own small icon panel next to the tracker, with a tooltip on hover, instead of taking up space inside the quest list.
-- **Daily / Weekly / Legacy tabs** for switching which content you're looking at.
+- **Zone-organized tracker** - click a zone (Eversong Woods, Zul'Aman, Vaults of Atal'Utek, etc.) to expand it. Collapsed by default.
+- **Great Vault & currencies panel** - its own small icon panel next to the tracker, hover for details.
+- **Daily / Weekly / Legacy tabs.**
 
 ### 🔧 Changed
-- **No more checkboxes** - click a quest's name to mark it complete instead. Completed quests show with a strikethrough.
-- Custom scrollbar to match the rest of the addon family instead of the default WoW one.
+- **No more checkboxes** - click a quest's name to mark it complete. Completed quests show with a strikethrough.
+- Custom scrollbar to match the rest of the addon family.
 
 ### 🐛 Fixed
-- The window no longer disappears while your mouse is over the new Great Vault/currency panel.
-- The detected-quests report no longer keeps listing quests you've already added to the catalog.
-- Several quests that weren't grouped into a real zone before now are.
+- The window no longer disappears while your mouse is over the Great Vault/currency panel.
+- The detected-quests report no longer keeps listing quests already in the catalog.
+- Several quests now correctly grouped into a real zone.
 
 ---
 
