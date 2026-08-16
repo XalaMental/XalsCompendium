@@ -62,10 +62,10 @@ local colorsContainers = {}
 local backupContainers = {}
 
 -- Standing rule: every customizable feature needs a small, unobtrusive
--- "reset to default" option. Clears per-type enable/disable overrides,
--- per-item colors, and appearance settings (frameless/bgAlpha/scale/
--- accentColor) back to default - one unified reset rather than a separate
--- button per customizable feature.
+-- "reset to default" option. Clears per-type enable/disable overrides and
+-- appearance settings (frameless/bgAlpha/scale/accentColor) back to
+-- default - one unified reset rather than a separate button per
+-- customizable feature.
 function O:ResetToDefaults()
 	XComp_DB.settings.typeEnabled = {}
 	XComp_DB.settings.frameless = nil
@@ -75,7 +75,6 @@ function O:ResetToDefaults()
 	XComp_DB.settings.minimized = nil
 	XComp_DB.settings.typeOrder = nil
 	XComp_DB.settings.categoryOrder = nil
-	XComp_DB.itemColors = {}
 	XComp_DB.accentColor = nil
 	XComp_DB.bgColor = nil
 	if XComp.UI then
