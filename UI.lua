@@ -31,13 +31,18 @@ end
 local FRAME_W, FRAME_H = 380, 480
 local ROW_INSET = 12
 
+-- The manual-completion confirm popup (see GetCompletePopup/ShowCompletePopup
+-- below) - declared up here so CreateMainFrame's OnHide handler can close it
+-- too, alongside every other place that already does (RefreshSections).
+local completePopup
+
 -- Shared hover handling for the fade-when-idle behavior - called from BOTH
 -- the main frame's OnEnter/OnLeave and the side strip's (see
 -- CreateSideStrip), so moving the mouse onto the side strip counts as
 -- still hovering the window instead of triggering a fade-out. Hold/fade
 -- durations increased 2026-08-16 (explicit request: the previous 0.5s
 -- hold read as "almost instant").
-local HOVER_FADE_HOLD = 1.5
+local HOVER_FADE_HOLD = 5
 local HOVER_FADE_DURATION = 0.4
 
 function U:HandleHoverEnter()
@@ -399,6 +404,17 @@ function U:CreateMainFrame()
 	-- included before, so mousing over its icons made the window vanish).
 	f:SetScript("OnEnter", function() U:HandleHoverEnter() end)
 	f:SetScript("OnLeave", function() U:HandleHoverLeave() end)
+
+	-- Closes the complete-confirm popup no matter HOW the window closes
+	-- (the "Close" button, Escape, or U:Toggle all end up here) - same real
+	-- bug as the RefreshSections fix above, just covering every hide path
+	-- at once instead of each one individually.
+	f:SetScript("OnHide", function()
+		if completePopup then
+			completePopup:Hide()
+			completePopup.openForUID = nil
+		end
+	end)
 
 	f:Hide()
 	self.mainFrame = f
@@ -926,32 +942,6 @@ local ROW_H = 26
 -- items - the old Tier/Type/Category nesting is gone (rebuilt 2026-08-15).
 local INDENT_TIER, INDENT_TYPE = 0, 14
 
--- Right-click on an item row to color-code it (native ColorPickerFrame,
--- current post-10.2.5 API - SetupColorPickerAndShow, not the old
--- deprecated OpenColorPicker global). Colors are account-wide cosmetic
--- prefs, cleared via "Reset to Defaults" in Options.lua. Declared here,
--- BEFORE MakeItemRow below, since it calls this and Lua locals are only
--- visible after their declaration point.
-local function OpenItemColorPicker(item, label)
-	local r, g, b = XComp.Data:GetItemColor(item.uid)
-	r, g, b = r or 1, g or 1, b or 1
-
-	ColorPickerFrame:SetupColorPickerAndShow({
-		r = r, g = g, b = b,
-		swatchFunc = function()
-			local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-			XComp.Data:SetItemColor(item.uid, nr, ng, nb)
-			label:SetTextColor(nr, ng, nb, 1)
-		end,
-		cancelFunc = function()
-			local pr, pg, pb = ColorPickerFrame:GetPreviousValues()
-			if pr then
-				label:SetTextColor(pr, pg, pb, 1)
-			end
-		end,
-	})
-end
-
 -- Zone-grouping redesign (2026-08-15, per the approved mockup) - one fixed
 -- color per named zone, shown as the header's left-edge bar - not cycled/
 -- assigned automatically, so a given zone always reads the same color
@@ -1026,14 +1016,16 @@ end
 -- Strikethrough (via MakeItemRow's own text styling) is still what shows
 -- completion at a glance - this popup is only the INPUT, not the display.
 -- One shared frame, repositioned per click, rather than building a new
--- frame every time.
-local completePopup
-
+-- frame every time. (`completePopup` itself is declared near the top of
+-- the file, not here, so CreateMainFrame's OnHide handler can reach it.)
 local function GetCompletePopup()
 	if completePopup then return completePopup end
 
+	-- Sized with real bottom padding below the checkbox (2026-08-16 fix -
+	-- the previous 50px height didn't leave room for the checkbox at all,
+	-- so it rendered flush against/past the popup's own bottom border).
 	local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-	popup:SetSize(150, 50)
+	popup:SetSize(150, 76)
 	popup:SetFrameStrata("TOOLTIP")
 	popup:SetBackdrop({
 		bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -1047,13 +1039,13 @@ local function GetCompletePopup()
 
 	local label = popup:CreateFontString(nil, "OVERLAY")
 	label:SetFontObject(XComp.BodyFont)
-	label:SetPoint("TOP", popup, "TOP", 0, -10)
+	label:SetPoint("TOP", popup, "TOP", 0, -12)
 	label:SetText("Complete?")
 	label:SetTextColor(ar, ag, ab, 1)
 	popup.label = label
 
 	local cb = XComp.MakeCheckbox(popup, 20)
-	cb:SetPoint("TOP", label, "BOTTOM", 0, -8)
+	cb:SetPoint("TOP", label, "BOTTOM", 0, -10)
 	popup.checkbox = cb
 
 	popup:Hide()
@@ -1061,16 +1053,28 @@ local function GetCompletePopup()
 	return popup
 end
 
+-- Real toggle (2026-08-16 fix): clicking the SAME item's name a second time
+-- while its popup is already open closes it again, instead of only ever
+-- being able to open it. Clicking a DIFFERENT item's name while one is
+-- already open just moves it there, same as before.
 local function ShowCompletePopup(anchorFrame, item, resetEpoch)
 	local popup = GetCompletePopup()
+	if popup:IsShown() and popup.openForUID == item.uid then
+		popup:Hide()
+		popup.openForUID = nil
+		return
+	end
+
 	popup:ClearAllPoints()
 	popup:SetPoint("TOP", anchorFrame, "BOTTOM", 0, -2)
+	popup.openForUID = item.uid
 
 	local complete = XComp.Data:GetItemStatus(item, resetEpoch)
 	popup.checkbox:SetChecked(complete)
 	popup.checkbox.OnToggle = function(self)
 		XComp.Data:SetManualOverride(item.uid, self:GetChecked() and true or false, resetEpoch)
 		popup:Hide()
+		popup.openForUID = nil
 		XComp.UI:RefreshSections()
 	end
 
@@ -1095,15 +1099,13 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	end
 	label:SetText(text)
 
-	-- Color priority: per-item custom color, then complete (dimmed gray +
-	-- strikethrough), then active rotating/task-quest content (whole name
-	-- turns green - only meaningful for rotating content, which is
-	-- otherwise hidden entirely while offline this cycle, so anything shown
-	-- here that isn't complete is, by definition, live right now).
-	local cr, cg, cb2 = XComp.Data:GetItemColor(item.uid)
-	if cr then
-		label:SetTextColor(cr, cg, cb2, 1)
-	elseif complete then
+	-- Color priority: complete (dimmed gray + strikethrough), then active
+	-- rotating/task-quest content (whole name turns green - only
+	-- meaningful for rotating content, which is otherwise hidden entirely
+	-- while offline this cycle, so anything shown here that isn't complete
+	-- is, by definition, live right now). Per-item custom color-coding
+	-- removed 2026-08-16 - never an actual request, was added unprompted.
+	if complete then
 		label:SetTextColor(0.42, 0.40, 0.36, 1)
 	elseif item.isRotating or item.questIDs then
 		label:SetTextColor(0.35, 0.85, 0.40, 1)
@@ -1175,10 +1177,27 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	end
 
 	-- Left-click the name to open the manual-completion confirm popup;
-	-- right-click still opens the color picker, same as before.
+	-- right-click opens the real in-game quest log entry (2026-08-16
+	-- correction - was the color picker, which was never actually
+	-- requested). QuestMapFrame_OpenToQuestDetails is the real, current
+	-- Blizzard API for this - confirmed in Blizzard's own UI source and
+	-- used by Kaliel's Tracker, not guessed.
 	row:SetScript("OnMouseUp", function(_, button)
 		if button == "RightButton" then
-			OpenItemColorPicker(item, label)
+			local questID = item.questID
+			if not questID and item.questIDs then
+				for _, qid in ipairs(item.questIDs) do
+					if C_QuestLog.IsOnQuest(qid) or C_TaskQuest.IsActive(qid) then
+						questID = qid
+						break
+					end
+				end
+			end
+			if questID then
+				QuestMapFrame_OpenToQuestDetails(questID)
+			else
+				print("|cffEBB706Xal's Compendium|r: no quest log entry available for " .. item.name .. " right now.")
+			end
 		else
 			ShowCompletePopup(row, item, resetEpoch)
 		end
@@ -1232,6 +1251,18 @@ end
 function U:RefreshSections()
 	local f = self:CreateMainFrame()
 	local container = f.sectionsContainer
+
+	-- Real bug fixed 2026-08-16: the complete-confirm popup was anchored to
+	-- an item row, but every refresh destroys and recreates ALL rows below
+	-- (SetParent(nil)) - the popup itself is a separate frame parented to
+	-- UIParent, so it was never affected by that and just stayed floating
+	-- on screen, detached from anything, if a refresh happened while it was
+	-- open. Any refresh now closes it outright rather than leaving it
+	-- anchored to a row that's about to stop existing.
+	if completePopup then
+		completePopup:Hide()
+		completePopup.openForUID = nil
+	end
 
 	if container.rows then
 		for _, row in ipairs(container.rows) do
