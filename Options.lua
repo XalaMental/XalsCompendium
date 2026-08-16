@@ -564,6 +564,32 @@ function O:PopulateAppearanceRows(container)
 	framelessDesc:SetJustifyH("LEFT")
 	framelessDesc:SetText("Minimal HUD style - strips the background/border entirely.")
 
+	-- Great Vault/currencies side strip toggle (2026-08-15, explicit
+	-- request) - on by default, off for players who only want quest
+	-- content and consider vault/currency info "added information" they
+	-- don't need cluttering the window.
+	local stripRow = NextAppearRow(APPEAR_ROW_H)
+	local stripCB = MakeCheckbox(stripRow, 22)
+	stripCB:SetPoint("TOPLEFT", stripRow, "TOPLEFT", 0, 0)
+	stripCB:SetChecked(not (XComp_DB.settings and XComp_DB.settings.showSideStrip == false))
+	stripCB.OnToggle = function(btn)
+		XComp_DB.settings = XComp_DB.settings or {}
+		XComp_DB.settings.showSideStrip = btn:GetChecked() and true or false
+		if XComp.UI then XComp.UI:RefreshSideStrip() end
+	end
+	local stripName = stripRow:CreateFontString(nil, "OVERLAY")
+	stripName:SetFontObject(XComp.TitleFont)
+	stripName:SetPoint("LEFT", stripCB, "RIGHT", 6, 8)
+	local slr, slg, slb = XComp.GetAccentColor()
+	stripName:SetTextColor(slr, slg, slb, 1)
+	stripName:SetText("Show Great Vault / currencies strip")
+	local stripDesc = stripRow:CreateFontString(nil, "OVERLAY")
+	stripDesc:SetFontObject(XComp.BodyFont)
+	stripDesc:SetPoint("TOPLEFT", stripName, "BOTTOMLEFT", 0, -4)
+	stripDesc:SetPoint("RIGHT", stripRow, "RIGHT", 0, 0)
+	stripDesc:SetJustifyH("LEFT")
+	stripDesc:SetText("A small icon panel outside the tracker's right edge for Great Vault progress and tracked currencies. Turn off if you only want quest content.")
+
 	-- Background transparency slider. Named explicitly (not nil) because
 	-- OptionsSliderTemplate's Low/High/Text sub-widgets are resolved via
 	-- _G[name.."Low"] etc., which requires the frame to actually have a
