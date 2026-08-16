@@ -58,6 +58,7 @@ read_globals = {
     "UIDropDownMenu_Initialize",
     "UIDropDownMenu_CreateInfo",
     "UIDropDownMenu_AddButton",
+    "QuestMapFrame_OpenToQuestDetails",
 }
 
 -- Textures/backdrop tables and long chained SetPoint calls read as "unused
