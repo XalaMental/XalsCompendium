@@ -1,5 +1,27 @@
 # Xal's Compendium - Changelog
 
+## 2.0.0 - August 16, 2026
+
+---
+
+This one turned into a full rebuild of the main tracker, not just a tweak. I looked at where things stood and it just didn't match the clean look I actually wanted - too much nested clicking to get to anything, a checkbox on every line that always bugged me, and Great Vault/currency info sitting in the middle of my quest list when it's really its own separate thing. So I tore out the old nested menu system and reorganized everything by zone instead - click a zone, see what's there. Checkboxes are gone too; you just click the quest name now. Great Vault and currencies moved to their own little icon panel next to the window so they're not cluttering the actual quest list. Also fixed a real bug where quests I'd already added to the catalog kept showing up as "new" in the detection report.
+
+### 🆕 New
+- **Zone-organized tracker** - the old Current/Legacy -> Daily/Weekly -> Category menu tree is gone. The tracker is now a flat list of zone sections (Eversong Woods, Zul'Aman, Vaults of Atal'Utek, and so on) - click a zone to expand it, collapsed by default for a clean starting view.
+- **Great Vault & currencies panel** - your Great Vault progress and tracked currencies now live in their own small icon panel next to the tracker, with a tooltip on hover, instead of taking up space inside the quest list.
+- **Daily / Weekly / Legacy tabs** for switching which content you're looking at.
+
+### 🔧 Changed
+- **No more checkboxes** - click a quest's name to mark it complete instead. Completed quests show with a strikethrough.
+- Custom scrollbar to match the rest of the addon family instead of the default WoW one.
+
+### 🐛 Fixed
+- The window no longer disappears while your mouse is over the new Great Vault/currency panel.
+- The detected-quests report no longer keeps listing quests you've already added to the catalog.
+- Several quests that weren't grouped into a real zone before now are.
+
+---
+
 ## 1.0.7 - August 12, 2026
 
 ---
@@ -17,7 +39,7 @@ This update ended up being bigger than I expected once I got going. The whole ad
 
 ### 🗺️ Catalog
 - Added Showdown on Val, Showdown on Val (Heroic), Showdown on Naigtal, and Showdown on Naigtal (Heroic) to Weekly Events.
-- Added 20 more verified quests across Weekly Events, World Quests, Professions, and Legacy content.
+- Added 27 more verified quests across Weekly Events, World Quests, Professions, and Legacy content.
 
 ### ⚙️ Under the hood
 - Buttons, checkboxes, and divider lines across the whole addon now match the shared Xal's brand look (accent-gold borders, flat style, thicker lines) instead of Blizzard's default grey/native style.
