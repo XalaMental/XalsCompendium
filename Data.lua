@@ -93,38 +93,62 @@ do
 	local weeklyEvents = weeklyType.categories[3]
 
 	local seedItems = {
-		{ uid = "quest-96049", name = "Stalkers of the Stars", questID = 96049, children = {} },
-		{ uid = "quest-96080", name = "Void Strike", questID = 96080, children = {} },
-		{ uid = "quest-96703", name = "Veterans of the Great Dark", questID = 96703, children = {} },
+		{ uid = "quest-96049", name = "Stalkers of the Stars", questID = 96049, zone = "Voidstorm", children = {} },
+		{ uid = "quest-96080", name = "Void Strike", questID = 96080, zone = "Voidstorm", children = {} },
+		{ uid = "quest-96703", name = "Veterans of the Great Dark", questID = 96703, zone = "Voidstorm", children = {} },
 		-- Weekly dungeon board - a ROTATING single slot, only ONE of these
 		-- 5 dungeons is actually the live/offered quest in any given week
 		-- (confirmed by the user 2026-08-13 - Murder Row was this week's,
 		-- the other 4 weren't simultaneously active). questIDs (plural) -
 		-- GetItemStatus treats it complete if ANY one is flagged completed.
-		{ uid = "weekly-dungeon-rotation", name = "Weekly Dungeon Quest (rotates)", questIDs = { 93751, 93752, 93753, 93754, 93758 }, children = {} },
-		{ uid = "quest-98220", name = "Altar of Fangs", questID = 98220, children = {} },
-		-- Showdown on Val / Naigtal (2026-08-12) - real, verified weekly
-		-- disruption-zone quests, both Normal and Heroic tracked separately
-		-- since they're independently completable and not every player runs
-		-- Heroic (confirmed via Wowhead: quest=96713/96714/96717/96718).
-		{ uid = "quest-96713", name = "Showdown on Val", questID = 96713, children = {} },
-		{ uid = "quest-96714", name = "Showdown on Val (Heroic)", questID = 96714, children = {} },
-		{ uid = "quest-96717", name = "Showdown on Naigtal", questID = 96717, children = {} },
-		{ uid = "quest-96718", name = "Showdown on Naigtal (Heroic)", questID = 96718, children = {} },
+		-- Tagged by pickup location (Silvermoon City), not by which dungeon
+		-- is live that week - confirmed 2026-08-15, same reasoning as The
+		-- World Awaits.
+		{ uid = "weekly-dungeon-rotation", name = "Weekly Dungeon Quest (rotates)", questIDs = { 93751, 93752, 93753, 93754, 93758 }, zone = "Silvermoon City", children = {} },
+		{ uid = "quest-98220", name = "Altar of Fangs", questID = 98220, zone = "Vaults of Atal'Utek", children = {} },
+		-- Showdown on Val / Naigtal - ANOTHER rotating pool (confirmed by
+		-- the user 2026-08-14: "if Val is active one week Naigtal will be
+		-- active the next"), same shape as the dungeon board above. Normal
+		-- and Heroic stay separate pools from each other since not every
+		-- player runs Heroic and they're independently completable.
+		-- Tagged by pickup NPC (Riftblade Maella, primary location
+		-- Silvermoon City) - confirmed 2026-08-15, same reasoning as the
+		-- dungeon board above.
+		{ uid = "showdown-rotation-normal", name = "Showdown Zone (rotates)", questIDs = { 96713, 96717 }, zone = "Silvermoon City", children = {} },
+		{ uid = "showdown-rotation-heroic", name = "Showdown Zone (Heroic, rotates)", questIDs = { 96714, 96718 }, zone = "Silvermoon City", children = {} },
 		-- Batch from the dev-only auto-detection tool's export report
 		-- (2026-08-12), each individually verified against Wowhead before
 		-- being added - not a raw dump. Left OUT: Tracking Quest (75511,
 		-- Blizzard's own "Hidden Quest" type - not meant to be player-facing)
 		-- and Special Assignment: Capstone 1 - Unlock (91193, an unlock/
 		-- prerequisite step rather than the actual reward quest).
-		{ uid = "quest-94386", name = "Void Assaults: Zul'Aman", questID = 94386, children = {} },
-		{ uid = "quest-96640", name = "Bounty of the Cursed", questID = 96640, children = {} },
+		-- isRotating = true - Blizzard's own live data tagged these as
+		-- "recurring" (Enum.QuestFrequency.ResetByScheduler) when detected,
+		-- confirming they're task/world-quest-style content with a real
+		-- on/off availability window, not a fixed always-there weekly.
+		-- RenderItemTree hides these entirely when XComp.Data:IsItemActive()
+		-- says they're not currently live.
+		{ uid = "quest-94386", name = "Void Assaults: Zul'Aman", questID = 94386, zone = "Zul'Aman", isRotating = true, children = {} },
+		{ uid = "quest-96640", name = "Bounty of the Cursed", questID = 96640, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
 		-- Murder Row (93752) is part of the rotating dungeon-board pool
 		-- above, not a standalone item - see "Weekly Dungeon Quest (rotates)".
-		{ uid = "quest-95440", name = "Housewarming", questID = 95440, children = {} },
-		{ uid = "quest-95413", name = "Community Engagement", questID = 95413, children = {} },
-		{ uid = "quest-95416", name = "Going Postal", questID = 95416, children = {} },
-		{ uid = "quest-98204", name = "Cursed Keepsake", questID = 98204, children = {} },
+		{ uid = "quest-95440", name = "Housewarming", questID = 95440, zone = "Housing", children = {} },
+		{ uid = "quest-95413", name = "Community Engagement", questID = 95413, zone = "Housing", children = {} },
+		{ uid = "quest-95416", name = "Going Postal", questID = 95416, zone = "Housing", children = {} },
+		{ uid = "quest-95438", name = "Lost Animals", questID = 95438, zone = "Housing", children = {} },
+		{ uid = "quest-98204", name = "Cursed Keepsake", questID = 98204, zone = "Housing", children = {} },
+		-- Purging the Vaults/Turn Back the Surge - Blizzard tagged these
+		-- plain "Weekly" (not ResetByScheduler) when detected, so NOT
+		-- marked isRotating - standard fixed weekly resets, not a
+		-- pick-one-of-several rotation.
+		{ uid = "quest-95520", name = "Purging the Vaults", questID = 95520, zone = "Vaults of Atal'Utek", children = {} },
+		{ uid = "quest-96995", name = "Turn Back the Surge", questID = 96995, zone = "The Coiled Isle", children = {} },
+		{ uid = "quest-98419", name = "Shoulder to Shoulder", questID = 98419, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		{ uid = "quest-96642", name = "Decisive Incursions", questID = 96642, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		{ uid = "quest-98232", name = "Midnight: Vaults of Atal'Utek", questID = 98232, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		-- Confirmed by Jason 2026-08-16, flagged "recurring" (ResetByScheduler)
+		-- when live-detected, same as the other Vaults of Atal'Utek isRotating items.
+		{ uid = "quest-96643", name = "From Whence it Came", questID = 96643, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
 	}
 	for _, item in ipairs(seedItems) do
 		table.insert(weeklyEvents.items, item)
@@ -132,11 +156,17 @@ do
 
 	local worldQuests = weeklyType.categories[7]
 	local worldQuestItems = {
-		{ uid = "quest-96492", name = "Special Assignment: Demand and Supply", questID = 96492, children = {} },
-		{ uid = "quest-93605", name = "The World Awaits", questID = 93605, children = {} },
-		{ uid = "quest-94866", name = "Special Assignment: Ours Once More!", questID = 94866, children = {} },
-		{ uid = "quest-92848", name = "Special Assignment: The Grand Magister's Drink", questID = 92848, children = {} },
-		{ uid = "quest-89354", name = "Preparing for Battle", questID = 89354, children = {} },
+		{ uid = "quest-96492", name = "Special Assignment: Demand and Supply", questID = 96492, zone = "The Coiled Isle", isRotating = true, children = {} },
+		-- Not zone-specific content itself (just "complete 10 world quests
+		-- anywhere"), but the quest is picked up from an NPC in Silvermoon
+		-- City - tagged by pickup location per Jason's explicit call
+		-- 2026-08-15: "probably Silver Moon would be the correct tag...
+		-- tag it in the spot wherever the NPC that gives it comes from."
+		{ uid = "quest-93605", name = "The World Awaits", questID = 93605, zone = "Silvermoon City", children = {} },
+		{ uid = "quest-94866", name = "Special Assignment: Ours Once More!", questID = 94866, zone = "Zul'Aman", isRotating = true, children = {} },
+		{ uid = "quest-92848", name = "Special Assignment: The Grand Magister's Drink", questID = 92848, zone = "Eversong Woods", isRotating = true, children = {} },
+		{ uid = "quest-89354", name = "Preparing for Battle", questID = 89354, zone = "Voidstorm", isRotating = true, children = {} },
+		{ uid = "quest-94743", name = "Special Assignment: Precision Excision", questID = 94743, zone = "Voidstorm", isRotating = true, children = {} },
 	}
 	for _, item in ipairs(worldQuestItems) do
 		table.insert(worldQuests.items, item)
@@ -150,24 +180,26 @@ do
 	local dailyType = currentTier.types[1]
 	local dailyCustom = dailyType.categories[8]
 	local dailyItems = {
-		{ uid = "quest-95336", name = "Frenzied Fossicking", questID = 95336, children = {} },
-		{ uid = "quest-95407", name = "Autumnal Addresses", questID = 95407, children = {} },
-		{ uid = "quest-95768", name = "My Stuff's Better Than Your Stuff", questID = 95768, children = {} },
-		{ uid = "quest-95673", name = "Suspicious Scare-gull", questID = 95673, children = {} },
+		{ uid = "quest-95336", name = "Frenzied Fossicking", questID = 95336, zone = "Housing", children = {} },
+		{ uid = "quest-95407", name = "Autumnal Addresses", questID = 95407, zone = "Housing", children = {} },
+		{ uid = "quest-95768", name = "My Stuff's Better Than Your Stuff", questID = 95768, zone = "Housing", children = {} },
+		{ uid = "quest-95673", name = "Suspicious Scare-gull", questID = 95673, zone = "Housing", children = {} },
 	}
 	for _, item in ipairs(dailyItems) do
 		table.insert(dailyCustom.items, item)
 	end
 
 	-- Legacy tier - old-expansion content, confirmed via Wowhead as
-	-- Battle for Azeroth (Azerite) and The War Within (Lynx Rescue), not
-	-- Midnight, so these belong under Legacy rather than Current.
+	-- Battle for Azeroth (Azerite), The War Within (Lynx Rescue, Titanic
+	-- Resurgence), not Midnight, so these belong under Legacy rather than
+	-- Current.
 	local legacyTier = D.Catalog.tiers[2]
 	local legacyWeekly = legacyTier.types[2]
 	local legacyWorldQuests = legacyWeekly.categories[7]
 	local legacyItems = {
-		{ uid = "quest-53436", name = "Azerite for the Alliance", questID = 53436, children = {} },
-		{ uid = "quest-82158", name = "Special Assignment: Lynx Rescue", questID = 82158, children = {} },
+		{ uid = "quest-53436", name = "Azerite for the Alliance", questID = 53436, zone = "Legacy", isRotating = true, children = {} },
+		{ uid = "quest-82158", name = "Special Assignment: Lynx Rescue", questID = 82158, zone = "Legacy", isRotating = true, children = {} },
+		{ uid = "quest-82154", name = "Special Assignment: Titanic Resurgence", questID = 82154, zone = "Legacy", isRotating = true, children = {} },
 	}
 	for _, item in ipairs(legacyItems) do
 		table.insert(legacyWorldQuests.items, item)
@@ -395,6 +427,27 @@ end
 
 function D:SetItemColor(uid, r, g, b)
 	EnsureItemColorsTable()[uid] = { r, g, b }
+end
+
+-- Whether this item is CURRENTLY offered/active this cycle - not every
+-- catalog item has a fixed weekly slot; a lot of the rotating content
+-- (Special Assignments, Void Assaults, Showdown zones, etc.) only becomes
+-- available/completable at certain times, not simultaneously every week.
+-- C_TaskQuest.IsActive is the real, direct Blizzard check for this (same
+-- system that drives World Quest availability) - confirmed real API,
+-- not guessed. Returns false for anything that was never a task-type
+-- quest to begin with (regular NPC-given quests like housing weeklies),
+-- so a false result does NOT necessarily mean "not available" for those -
+-- only meaningful as a positive "this is up right now" signal.
+function D:IsItemActive(item)
+	if item.questIDs then
+		for _, qid in ipairs(item.questIDs) do
+			if C_TaskQuest.IsActive(qid) then return true end
+		end
+		return false
+	end
+	if not item.questID then return false end
+	return C_TaskQuest.IsActive(item.questID)
 end
 
 function D:ClearItemColor(uid)
@@ -699,11 +752,21 @@ function D:ScanQuestLogForUntracked()
 	return found
 end
 
+-- Prunes any entry that's since been manually added to the real catalog -
+-- without this, GetUntrackedReport kept listing quests forever after they
+-- were already tracked (real bug found 2026-08-16: everything added to
+-- Data.lua earlier tonight was still showing up here, since nothing ever
+-- cleared the saved untrackedQuests entry once the real catalog entry
+-- existed).
 function D:GetUntrackedQuests()
 	local untracked = EnsureUntrackedTable()
 	local list = {}
 	for questID, entry in pairs(untracked) do
-		table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen })
+		if self:FindItemByQuestID(questID) then
+			untracked[questID] = nil
+		else
+			table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen })
+		end
 	end
 	table.sort(list, function(a, b) return a.firstSeen > b.firstSeen end)
 	return list
