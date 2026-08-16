@@ -409,26 +409,6 @@ function D:CountCategory(category, resetEpoch)
 	return self:CountItems(category.items, resetEpoch)
 end
 
--------------------------------------------------
--- Per-item color-coding (account-wide cosmetic preference)
--------------------------------------------------
-local function EnsureItemColorsTable()
-	XComp_DB.itemColors = XComp_DB.itemColors or {}
-	return XComp_DB.itemColors
-end
-
--- Returns r, g, b or nil if no custom color is set (caller should fall
--- back to the default label color).
-function D:GetItemColor(uid)
-	local c = EnsureItemColorsTable()[uid]
-	if not c then return nil end
-	return c[1], c[2], c[3]
-end
-
-function D:SetItemColor(uid, r, g, b)
-	EnsureItemColorsTable()[uid] = { r, g, b }
-end
-
 -- Whether this item is CURRENTLY offered/active this cycle - not every
 -- catalog item has a fixed weekly slot; a lot of the rotating content
 -- (Special Assignments, Void Assaults, Showdown zones, etc.) only becomes
@@ -448,10 +428,6 @@ function D:IsItemActive(item)
 	end
 	if not item.questID then return false end
 	return C_TaskQuest.IsActive(item.questID)
-end
-
-function D:ClearItemColor(uid)
-	EnsureItemColorsTable()[uid] = nil
 end
 
 function D:CountType(typeSection)
