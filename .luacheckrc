@@ -46,6 +46,7 @@ read_globals = {
     "C_CurrencyInfo",
     "C_Reputation",
     "C_TaskQuest",
+    "C_Map",
     "time",
     "date",
     "Enum",
