@@ -1,5 +1,19 @@
 # Xal's Compendium - Changelog
 
+## 2.1.0 - August 17, 2026
+
+---
+
+A big batch of quests I tracked down and verified one by one, plus a couple of small fixes that turned up along the way.
+
+### 🆕 New
+- **~25 more real quests added to the catalog**, each individually verified - Special Assignments, Prey hunts, several standalone weeklies, a couple older-expansion quests filed under Legacy, and more.
+
+### 🐛 Fixed
+- The weekly Showdown quest board now correctly recognizes all of its rotating quest variants.
+
+---
+
 ## 2.0.1 - August 16, 2026
 
 ---
