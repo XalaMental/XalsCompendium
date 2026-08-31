@@ -63,6 +63,19 @@ SAVE_EVERY = 200  # flush progress periodically so an interrupted run doesn't lo
 MAX_RETRIES = 4
 RETRY_BACKOFF = 3  # seconds, doubles each retry (3, 6, 12, 24)
 
+
+class QuestLookupTemporarilyFailed(Exception):
+    """A single quest lookup kept failing with a server-side (5xx) error
+    even after retries. Real production failure, 2026-08-17: one quest
+    lookup hit an HTTP 500 and crashed the entire run, losing the rest of
+    that batch's progress. This is NOT the same as a 404 - the id must
+    stay unresolved so a future run tries it again, not get silently
+    written off forever."""
+    def __init__(self, quest_id, original_error):
+        self.quest_id = quest_id
+        self.original_error = original_error
+        super().__init__(f"quest {quest_id}: {original_error}")
+
 # Real failure mode hit in production (2026-08-09): a transient SSL/connection
 # error mid-run to oauth.battle.net crashed the WHOLE script uncaught, wasting
 # a 15-minute run that had already fetched 66,412 quest IDs from wago.tools
@@ -76,18 +89,29 @@ def with_retries(description, fn):
     """Calls fn() with no args, retrying on transient network errors with
     exponential backoff. Raises the last error if every attempt fails.
 
-    HTTPError is deliberately let through immediately, NOT retried here -
-    it means a real response came back (e.g. a 404), which is a valid
-    outcome each caller handles itself, not a connection-level problem.
-    It has to be checked first since HTTPError is actually a SUBCLASS of
-    URLError in Python - without this check it would get caught below too
-    and every legitimate 404 would burn through 4 pointless retries."""
+    A 5xx HTTPError IS retried here (real production failure, 2026-08-17:
+    a single mid-run HTTP 500 from Blizzard's own API - almost certainly a
+    momentary server-side hiccup, not a real "no such quest" answer -
+    crashed the whole script and lost the rest of that run's progress).
+    A 4xx HTTPError (e.g. a real 404 "no record for this quest") is let
+    through immediately, NOT retried - that's a real response each caller
+    handles itself, not a connection-level problem. This has to be checked
+    before the generic TRANSIENT_ERRORS catch since HTTPError is actually a
+    SUBCLASS of URLError in Python - without it, every legitimate 404 would
+    burn through 4 pointless retries too."""
     delay = RETRY_BACKOFF
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             return fn()
-        except urllib.error.HTTPError:
-            raise
+        except urllib.error.HTTPError as err:
+            if err.code < 500:
+                raise
+            if attempt == MAX_RETRIES:
+                print(f"  {description} failed after {MAX_RETRIES} attempts: HTTP {err.code}")
+                raise
+            print(f"  {description} failed (attempt {attempt}/{MAX_RETRIES}: HTTP {err.code}) - retrying in {delay}s...")
+            time.sleep(delay)
+            delay *= 2
         except TRANSIENT_ERRORS as err:
             if attempt == MAX_RETRIES:
                 print(f"  {description} failed after {MAX_RETRIES} attempts: {err}")
@@ -191,7 +215,12 @@ def fetch_quest_data(quest_id, token):
     except urllib.error.HTTPError as err:
         if err.code == 404:
             return None
-        raise
+        # A 5xx that survived every retry - a real, but almost certainly
+        # temporary, server-side problem. NOT the same as a 404 (permanent
+        # "no record") - the caller must NOT mark this id resolved, so a
+        # future run tries it again instead of silently giving up on it
+        # forever.
+        raise QuestLookupTemporarilyFailed(quest_id, err) from err
 
 
 def main():
@@ -230,10 +259,22 @@ def main():
 
     catalog = load_json(CATALOG_OUTPUT_PATH, {})
     resolved_ids = set(known_ids)
-    looked_up, skipped = 0, 0
+    looked_up, skipped, temp_failed = 0, 0, 0
 
     for i, quest_id in enumerate(batch, start=1):
-        data = fetch_quest_data(quest_id, token)
+        try:
+            data = fetch_quest_data(quest_id, token)
+        except QuestLookupTemporarilyFailed as err:
+            # Real bug fixed 2026-08-17: this used to crash the whole
+            # script on a single 5xx. Now it just logs and moves on to the
+            # next id - NOT added to resolved_ids, so a future run tries
+            # this one again instead of the whole run being wasted or this
+            # one id being silently given up on forever.
+            print(f"  Quest {quest_id} temporarily unavailable ({err.original_error}) - will retry a future run.")
+            temp_failed += 1
+            time.sleep(REQUEST_DELAY)
+            continue
+
         if data:
             catalog[str(quest_id)] = data
             looked_up += 1
@@ -248,7 +289,8 @@ def main():
 
         time.sleep(REQUEST_DELAY)
 
-    print(f"  Looked up {looked_up} names, {skipped} had no retrievable API record.")
+    print(f"  Looked up {looked_up} names, {skipped} had no retrievable API record"
+          + (f", {temp_failed} temporarily unavailable (will retry a future run)." if temp_failed else "."))
 
     save_json(CATALOG_OUTPUT_PATH, catalog)
     save_json(ID_SNAPSHOT_PATH, sorted(resolved_ids))
