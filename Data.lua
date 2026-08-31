@@ -114,7 +114,7 @@ do
 		-- Tagged by pickup NPC (Riftblade Maella, primary location
 		-- Silvermoon City) - confirmed 2026-08-15, same reasoning as the
 		-- dungeon board above.
-		{ uid = "showdown-rotation-normal", name = "Showdown Zone (rotates)", questIDs = { 96713, 96717 }, zone = "Silvermoon City", children = {} },
+		{ uid = "showdown-rotation-normal", name = "Showdown Zone (rotates)", questIDs = { 96713, 96716, 96717 }, zone = "Silvermoon City", children = {} },
 		{ uid = "showdown-rotation-heroic", name = "Showdown Zone (Heroic, rotates)", questIDs = { 96714, 96718 }, zone = "Silvermoon City", children = {} },
 		-- Batch from the dev-only auto-detection tool's export report
 		-- (2026-08-12), each individually verified against Wowhead before
@@ -128,6 +128,7 @@ do
 		-- on/off availability window, not a fixed always-there weekly.
 		-- RenderItemTree hides these entirely when XComp.Data:IsItemActive()
 		-- says they're not currently live.
+		{ uid = "quest-94385", name = "Void Assaults: Eversong Woods", questID = 94385, zone = "Eversong Woods", isRotating = true, children = {} },
 		{ uid = "quest-94386", name = "Void Assaults: Zul'Aman", questID = 94386, zone = "Zul'Aman", isRotating = true, children = {} },
 		{ uid = "quest-96640", name = "Bounty of the Cursed", questID = 96640, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
 		-- Murder Row (93752) is part of the rotating dungeon-board pool
@@ -149,6 +150,42 @@ do
 		-- Confirmed by Jason 2026-08-16, flagged "recurring" (ResetByScheduler)
 		-- when live-detected, same as the other Vaults of Atal'Utek isRotating items.
 		{ uid = "quest-96643", name = "From Whence it Came", questID = 96643, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		{ uid = "quest-98420", name = "What's Out There?", questID = 98420, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		{ uid = "quest-96644", name = "Essence of Malice", questID = 96644, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		-- Confirmed by Jason 2026-08-17 - both Naigtal.
+		{ uid = "quest-97086", name = "Dangerous Enemies: Naigtal (Heroic)", questID = 97086, zone = "Naigtal", isRotating = true, children = {} },
+		{ uid = "quest-96942", name = "Oh Captain, Die Captain!", questID = 96942, zone = "Naigtal", children = {} },
+		-- Batch from real Wowhead research (2026-08-17), all verified before
+		-- adding - see compendium_changelog_dev.md for the full research
+		-- notes. "More Disruption" pairs with the already-added "Dangerous
+		-- Enemies: Naigtal (Heroic)" above.
+		{ uid = "quest-97087", name = "More Disruption: Naigtal (Heroic)", questID = 97087, zone = "Naigtal", isRotating = true, children = {} },
+		{ uid = "quest-96029", name = "Special Assignment: Face the Swarm", questID = 96029, zone = "The Coiled Isle", isRotating = true, children = {} },
+		{ uid = "quest-94795", name = "Special Assignment: Agents of the Shield", questID = 94795, zone = "Voidstorm", isRotating = true, children = {} },
+		{ uid = "quest-94391", name = "Special Assignment: Push Back the Light", questID = 94391, zone = "Harandar", isRotating = true, children = {} },
+		{ uid = "quest-91700", name = "Darkness Unmade", questID = 91700, zone = "Voidstorm", children = {} },
+		{ uid = "quest-96941", name = "A Pertinent Punishment", questID = 96941, zone = "Val", isRotating = true, children = {} },
+		{ uid = "quest-97128", name = "Lair: Nymrissa Wavecaller", questID = 97128, zone = "Tidebound Grotto", children = {} },
+		{ uid = "quest-89268", name = "Lost Legends", questID = 89268, zone = "Harandar", children = {} },
+		-- The REAL trackable "Shade and Claw" quest is 92139, NOT 95435 -
+		-- 95435 is just an Emissary wrapper with no combat objectives of its
+		-- own, 92139 is the actual Capstone World Quest with real kill/
+		-- destroy objectives. Confirmed via Wowhead's own See-Also link and
+		-- Relevant Locations box.
+		{ uid = "quest-92139", name = "Special Assignment: Shade and Claw", questID = 92139, zone = "Eversong Woods", isRotating = true, children = {} },
+		-- No fixed zone (multi-zone/event-based content, same treatment as
+		-- The World Awaits) - falls back to grouping under its category
+		-- label instead of a zone section.
+		{ uid = "quest-95468", name = "Hope in the Darkest Corners", questID = 95468, children = {} },
+		{ uid = "quest-89507", name = "Abundant Offerings", questID = 89507, children = {} },
+		{ uid = "quest-93608", name = "A Burning Path Through Time", questID = 93608, children = {} },
+		{ uid = "quest-93784", name = "A Gnawing Void of Curiosity", questID = 93784, zone = "Silvermoon City", children = {} },
+		-- The "Prey" hunt system - player picks the zone, so no fixed zone
+		-- tag. A Nightmarish Task is the weekly capstone tying the two
+		-- Nightmare-tier hunts together.
+		{ uid = "quest-95021", name = "Prey: Janoa the Fang (Nightmare)", questID = 95021, children = {} },
+		{ uid = "quest-95024", name = "Prey: Kadani the Claw (Nightmare)", questID = 95024, children = {} },
+		{ uid = "quest-94446", name = "A Nightmarish Task", questID = 94446, children = {} },
 	}
 	for _, item in ipairs(seedItems) do
 		table.insert(weeklyEvents.items, item)
@@ -157,6 +194,16 @@ do
 	local worldQuests = weeklyType.categories[7]
 	local worldQuestItems = {
 		{ uid = "quest-96492", name = "Special Assignment: Demand and Supply", questID = 96492, zone = "The Coiled Isle", isRotating = true, children = {} },
+		{ uid = "quest-96307", name = "Special Assignment: Wraith Wrath", questID = 96307, zone = "The Coiled Isle", isRotating = true, children = {} },
+		{ uid = "quest-94865", name = "Special Assignment: What Remains of a Temple Broken", questID = 94865, zone = "Zul'Aman", isRotating = true, children = {} },
+		-- Confirmed 2026-08-17: "add it in. If stuff comes up that we were
+		-- wrong, we can just change it" - real player testing is expected to
+		-- surface corrections, not a reason to hold off adding. Detected as
+		-- plain "weekly" (not "recurring"/ResetByScheduler), so NOT marked
+		-- isRotating - same standard-fixed-weekly treatment as Purging the
+		-- Vaults/Turn Back the Surge. No zone (battleground-based, "Win 4
+		-- Battleground matches" - not tied to any world zone).
+		{ uid = "quest-93593", name = "A Call to Battle", questID = 93593, children = {} },
 		-- Not zone-specific content itself (just "complete 10 world quests
 		-- anywhere"), but the quest is picked up from an NPC in Silvermoon
 		-- City - tagged by pickup location per Jason's explicit call
@@ -168,12 +215,17 @@ do
 		{ uid = "quest-89354", name = "Preparing for Battle", questID = 89354, zone = "Voidstorm", isRotating = true, children = {} },
 		{ uid = "quest-94743", name = "Special Assignment: Precision Excision", questID = 94743, zone = "Voidstorm", isRotating = true, children = {} },
 	}
+	-- daily-cadence "Prey" content and worldQuestItems both feed the same
+	-- Weekly-type World Quests category above; this one's a real Daily,
+	-- inserted separately below into the Daily type's own World Quests
+	-- category.
 	for _, item in ipairs(worldQuestItems) do
 		table.insert(worldQuests.items, item)
 	end
 
 	local professions = weeklyType.categories[4]
 	table.insert(professions.items, { uid = "quest-93691", name = "Blacksmithing Services Requested", questID = 93691, children = {} })
+	table.insert(professions.items, { uid = "quest-93695", name = "Leatherworking Services Requested", questID = 93695, zone = "Silvermoon City", children = {} })
 
 	-- Daily-frequency housing/neighborhood content - bucketed under Custom
 	-- (not "Weekly Events", which would read wrong under the Daily type).
@@ -189,6 +241,9 @@ do
 		table.insert(dailyCustom.items, item)
 	end
 
+	local dailyWorldQuests = dailyType.categories[7]
+	table.insert(dailyWorldQuests.items, { uid = "quest-96528", name = "Prey: Anguish from Beyond", questID = 96528, zone = "The Coiled Isle", children = {} })
+
 	-- Legacy tier - old-expansion content, confirmed via Wowhead as
 	-- Battle for Azeroth (Azerite), The War Within (Lynx Rescue, Titanic
 	-- Resurgence), not Midnight, so these belong under Legacy rather than
@@ -200,10 +255,28 @@ do
 		{ uid = "quest-53436", name = "Azerite for the Alliance", questID = 53436, zone = "Legacy", isRotating = true, children = {} },
 		{ uid = "quest-82158", name = "Special Assignment: Lynx Rescue", questID = 82158, zone = "Legacy", isRotating = true, children = {} },
 		{ uid = "quest-82154", name = "Special Assignment: Titanic Resurgence", questID = 82154, zone = "Legacy", isRotating = true, children = {} },
+		{ uid = "quest-82155", name = "Special Assignment: Shadows Below", questID = 82155, zone = "Legacy", isRotating = true, children = {} },
+		-- Real Wowhead research batch, 2026-08-17.
+		{ uid = "quest-82156", name = "Special Assignment: When the Deeps Stir", questID = 82156, zone = "Legacy", isRotating = true, children = {} },
+		{ uid = "quest-82157", name = "Special Assignment: Rise of the Colossals", questID = 82157, zone = "Legacy", isRotating = true, children = {} },
+		{ uid = "quest-72291", name = "Story of a Memorable Victory", questID = 72291, zone = "Legacy", children = {} },
+		{ uid = "quest-82946", name = "Rollin' Down in the Deeps", questID = 82946, zone = "Legacy", children = {} },
+		-- "Making a Deposit" x3 (89061/89062/89063) - confirmed genuinely
+		-- indistinguishable on Wowhead (identical text/rewards/NPC), same
+		-- rotating-pool treatment as the dungeon board. K'aresh/Ghosts of
+		-- K'aresh (patch 11.2.0) - older than Midnight, so Legacy.
+		{ uid = "making-a-deposit-rotation", name = "Making a Deposit (rotates)", questIDs = { 89061, 89062, 89063 }, zone = "Legacy", children = {} },
 	}
 	for _, item in ipairs(legacyItems) do
 		table.insert(legacyWorldQuests.items, item)
 	end
+
+	-- Sureki Incursion: Southern Swarm - the one Legacy item detected as a
+	-- daily rather than weekly, so it needs the Legacy tier's Daily type
+	-- populated too, not just Weekly like everything else above.
+	local legacyDaily = legacyTier.types[1]
+	table.insert(legacyDaily.categories[7].items,
+		{ uid = "quest-87477", name = "Sureki Incursion: Southern Swarm", questID = 87477, zone = "Legacy", children = {} })
 end
 
 -- Catalog item shape (for reference - the extraction pipeline fills these in):
@@ -707,7 +780,22 @@ function D:CheckQuestForCatalog(questID)
 	local untracked = EnsureUntrackedTable()
 	if untracked[questID] then return false end -- already recorded
 
-	untracked[questID] = { name = info.title, frequency = liveType, firstSeen = time() }
+	-- Best-guess zone (2026-08-16, explicit request - "it should tell you
+	-- which zone it's from" instead of making Jason look each one up by
+	-- hand). C_QuestLog.GetNextWaypoint (already used elsewhere in this
+	-- file for the TomTom Map button, so confirmed real/working) gives a
+	-- mapID for the quest; C_Map.GetMapInfo turns that into a real zone
+	-- name. Not always available (e.g. quest has no active waypoint that
+	-- moment), so this is a helpful guess to double-check by hand, not a
+	-- guaranteed answer.
+	local zoneName
+	local mapID = select(1, C_QuestLog.GetNextWaypoint(questID))
+	if mapID then
+		local mapInfo = C_Map.GetMapInfo(mapID)
+		zoneName = mapInfo and mapInfo.name
+	end
+
+	untracked[questID] = { name = info.title, frequency = liveType, firstSeen = time(), zoneGuess = zoneName }
 	return true, info.title, liveType
 end
 
@@ -741,7 +829,7 @@ function D:GetUntrackedQuests()
 		if self:FindItemByQuestID(questID) then
 			untracked[questID] = nil
 		else
-			table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen })
+			table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen, zoneGuess = entry.zoneGuess })
 		end
 	end
 	table.sort(list, function(a, b) return a.firstSeen > b.firstSeen end)
@@ -766,8 +854,9 @@ function D:GetUntrackedReport()
 		#list, #list == 1 and "" or "s"))
 	table.insert(lines, "")
 	for _, entry in ipairs(list) do
-		table.insert(lines, string.format("%s (id %d) - %s - https://www.wowhead.com/quest=%d",
-			entry.name, entry.questID, entry.frequency, entry.questID))
+		local zonePart = entry.zoneGuess and (" - " .. entry.zoneGuess .. " (best guess)") or ""
+		table.insert(lines, string.format("%s (id %d) - %s%s - https://www.wowhead.com/quest=%d",
+			entry.name, entry.questID, entry.frequency, zonePart, entry.questID))
 	end
 	return lines
 end
