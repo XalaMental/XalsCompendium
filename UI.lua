@@ -92,18 +92,25 @@ function U:CreateMainFrame()
 		edgeSize = 1,
 	})
 
-	-- Panel background art (2026-08-15) - dark green swirl texture sitting
-	-- on top of the flat backdrop color, below everything else (border,
-	-- dividers, text all draw at ARTWORK/OVERLAY, above this BORDER-layer
-	-- texture). Tested stretched across the full resize range (280x200 to
-	-- 380x800) with no visible distortion, since the source art is soft/
-	-- low-detail enough that directional stretching doesn't show. Hidden
-	-- in frameless mode and its own alpha follows the same Background
-	-- Transparency slider as everything else - see ApplyTheme below.
-	local bgImage = f:CreateTexture(nil, "BORDER")
-	bgImage:SetAllPoints(f)
-	bgImage:SetTexture("Interface\\AddOns\\XalsCompendium\\Textures\\PanelBackground.jpg")
-	f.bgImage = bgImage
+	-- Real user complaint, 2026-09-29: something outside our own code
+	-- (confirmed - no OnEnter/hover handler anywhere in this addon calls
+	-- Show or Toggle) was reopening the tracker on a hover shortly after it
+	-- was closed. A short time-based debounce (first attempt) wasn't
+	-- enough - it simply expired if the hover lasted longer than the
+	-- window, and the next spurious call got through same as before. Fixed
+	-- at the root instead: OnHide marks the window userClosed, and the
+	-- frame's OWN Show() method is overridden to refuse to run at all while
+	-- that's set, no matter who calls it or when - our own code, another
+	-- addon, anything. U:Toggle() is the ONE legitimate path back in; it
+	-- explicitly clears the flag right before showing.
+	f:HookScript("OnHide", function(self)
+		self.userClosed = true
+	end)
+	local realShow = f.Show
+	f.Show = function(self, ...)
+		if self.userClosed then return end
+		return realShow(self, ...)
+	end
 
 	f:SetMovable(true)
 	f:EnableMouse(true)
@@ -132,50 +139,19 @@ function U:CreateMainFrame()
 	f.resizeGrip = resizeGrip
 
 	local title = f:CreateFontString(nil, "OVERLAY")
-	title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 20, "")
+	title:SetFont(XComp.TITLE_FONT_PATH, 20, "")
 	title:SetPoint("TOP", f, "TOP", 0, -16)
 	title:SetText("Xal's Compendium")
 	XComp.ApplyTextShadow(title)
 	f.title = title
 
-	-- Minimize button - collapses the tracker down to a small "D: x  W: y"
-	-- pill in the same spot, for tucking it out of the way (SilverDragon's
-	-- minimized bar was the explicit reference, 2026-08-12). Text/link style,
-	-- same convention as XComp.MakeCloseButton.
-	local minimizeBtn = CreateFrame("Button", nil, f)
-	minimizeBtn:SetSize(20, 20)
-	minimizeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -8)
-	local minimizeLabel = minimizeBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	minimizeLabel:SetPoint("CENTER")
-	minimizeLabel:SetText("-")
-	do
-		local mr, mg, mb = XComp.GetAccentColor()
-		minimizeLabel:SetTextColor(mr, mg, mb, 1)
-	end
-	minimizeBtn.label = minimizeLabel
-	minimizeBtn:SetScript("OnEnter", function() minimizeLabel:SetTextColor(1, 1, 1, 1) end)
-	minimizeBtn:SetScript("OnLeave", function()
-		local ar2, ag2, ab2 = XComp.GetAccentColor()
-		minimizeLabel:SetTextColor(ar2, ag2, ab2, 1)
-	end)
-	minimizeBtn:SetScript("OnClick", function() U:ToggleMinimized() end)
-	f.minimizeBtn = minimizeBtn
-
-	-- Minimized-state label ("D: x   W: y") - only shown while minimized,
-	-- replaces the whole scroll/content area.
-	local minimizedLabel = f:CreateFontString(nil, "OVERLAY")
-	minimizedLabel:SetFontObject(XComp.TitleFont)
-	minimizedLabel:SetPoint("LEFT", f, "LEFT", 16, 0)
-	minimizedLabel:SetJustifyH("LEFT")
-	XComp.ApplyTextShadow(minimizedLabel)
-	minimizedLabel:Hide()
-	f.minimizedLabel = minimizedLabel
 
 	-- Overall total, since sections start collapsed by default - this is
 	-- the only at-a-glance progress view without expanding anything.
 	local overall = f:CreateFontString(nil, "OVERLAY")
 	overall:SetFontObject(XComp.BodyFont)
 	overall:SetPoint("TOP", title, "BOTTOM", 0, -4)
+	overall:SetTextColor(XComp.SIDEBAR_UNSELECTED[1], XComp.SIDEBAR_UNSELECTED[2], XComp.SIDEBAR_UNSELECTED[3], 1)
 	f.overallLabel = overall
 
 	-- Hide-completed toggle - moved to a bottom-left text-link button
@@ -226,6 +202,7 @@ function U:CreateMainFrame()
 	-- Only one view renders at a time; the subtitle above shows that view's
 	-- own completion count, not a combined total.
 	local TAB_DEFS = {
+		{ key = "zone", label = "Zone" },
 		{ key = "daily", label = "Daily" },
 		{ key = "weekly", label = "Weekly" },
 		{ key = "legacy", label = "Legacy" },
@@ -237,11 +214,12 @@ function U:CreateMainFrame()
 	local function RefreshTabHighlight()
 		local selected = (XComp_DB.settings and XComp_DB.settings.selectedType) or "weekly"
 		local ar3, ag3, ab3 = XComp.GetAccentColor()
+		local ur, ug, ub = XComp.SIDEBAR_UNSELECTED[1], XComp.SIDEBAR_UNSELECTED[2], XComp.SIDEBAR_UNSELECTED[3]
 		for _, tb in ipairs(tabButtons) do
 			if tb.key == selected then
-				tb.label:SetTextColor(1, 1, 1, 1)
+				tb.label:SetTextColor(ar3, ag3, ab3, 1)
 			else
-				tb.label:SetTextColor(ar3, ag3, ab3, 0.6)
+				tb.label:SetTextColor(ur, ug, ub, 1)
 			end
 		end
 	end
@@ -388,7 +366,26 @@ function U:CreateMainFrame()
 	-- Nudged further left than the default position here specifically,
 	-- since this window (unlike the standalone settings window) also has
 	-- a resize grip occupying the very corner.
-	local closeBtn = XComp.MakeCloseButton(f)
+	--
+	-- Brute-force safety net (2026-09-29): on top of the userClosed/Show
+	-- override above, this also force-hides the frame every 0.2s for 3
+	-- seconds right after Close is clicked - whatever is reopening it, this
+	-- physically stomps it back shut faster than a human can react, without
+	-- needing to know what's causing it.
+	local closeBtn = XComp.MakeCloseButton(f, function()
+		f.userClosed = true
+		f:Hide()
+		local ticks = 0
+		if f.forceCloseTicker then f.forceCloseTicker:Cancel() end
+		f.forceCloseTicker = C_Timer.NewTicker(0.2, function()
+			ticks = ticks + 1
+			if f:IsShown() then f:Hide() end
+			if ticks >= 15 then
+				f.forceCloseTicker:Cancel()
+				f.forceCloseTicker = nil
+			end
+		end)
+	end)
 	closeBtn:ClearAllPoints()
 	closeBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -24, 8)
 	f.closeBtn = closeBtn
@@ -420,7 +417,6 @@ function U:CreateMainFrame()
 	self.mainFrame = f
 	self:ApplyTheme()
 	self:ApplyIdleAlpha()
-	self:ApplyMinimizedState()
 	return f
 end
 
@@ -438,70 +434,6 @@ function U:ApplyIdleAlpha()
 	end
 end
 
--- Collapses the tracker down to a small "D: x   W: y" pill in the same spot
--- (minimize button toggles this) - everything except the minimize/close
--- buttons and the D/W label hides, and the window shrinks to fit. Persisted
--- in XComp_DB.settings.minimized so it stays minimized across reloads.
-function U:ApplyMinimizedState()
-	local f = self.mainFrame
-	if not f then return end
-	local minimized = XComp_DB.settings and XComp_DB.settings.minimized
-
-	local fullElements = {
-		f.title, f.overallLabel, f.tabRow, f.filterToggle, f.divider,
-		f.scrollFrame, f.resizeGrip, f.closeBtn,
-	}
-	-- Not part of fullElements below - its Show/Hide is driven by whether
-	-- content actually overflows (UpdateScrollRange), not just minimized
-	-- state, so a blanket Show() here would undo that auto-hide.
-	if f.scrollTrack and minimized then
-		f.scrollTrack:Hide()
-	end
-
-	for _, el in ipairs(fullElements) do
-		if el then
-			if minimized then el:Hide() else el:Show() end
-		end
-	end
-	if self.sideStrip then
-		local stripEnabled = not (XComp_DB.settings and XComp_DB.settings.showSideStrip == false)
-		if minimized or not stripEnabled then
-			self.sideStrip:Hide()
-		else
-			self.sideStrip:Show()
-		end
-	end
-
-	if minimized then
-		local dailyLeft, weeklyLeft = XComp.Data:GetDailyWeeklyLeft()
-		f.minimizedLabel:SetText(string.format("D: %d   W: %d", dailyLeft, weeklyLeft))
-		f.minimizedLabel:Show()
-		f.minimizeBtn.label:SetText("+")
-		-- Only actually resize on the transition INTO minimized, not on
-		-- every RefreshSections call while already minimized - avoids
-		-- fighting anything else that might touch the frame's size.
-		if not f._minimized then
-			f:SetSize(190, 36)
-		end
-	else
-		f.minimizedLabel:Hide()
-		f.minimizeBtn.label:SetText("-")
-		-- Same idea: only resize back on the transition OUT of minimized -
-		-- doing this unconditionally every refresh would fight both the
-		-- corner-drag resize and the auto-size-to-content logic below.
-		if f._minimized then
-			f:SetSize(FRAME_W, FRAME_H)
-		end
-	end
-	f._minimized = minimized
-end
-
-function U:ToggleMinimized()
-	XComp_DB.settings = XComp_DB.settings or {}
-	XComp_DB.settings.minimized = not XComp_DB.settings.minimized
-	self:ApplyMinimizedState()
-end
-
 -- Re-applies frameless mode, background transparency, accent color, and
 -- window scale - callable both at creation and live whenever an
 -- appearance setting changes, so Options.lua doesn't need to know the
@@ -515,15 +447,11 @@ function U:ApplyTheme()
 	if IsFrameless() then
 		f:SetBackdropColor(0, 0, 0, 0)
 		f:SetBackdropBorderColor(0, 0, 0, 0)
-		if f.bgImage then f.bgImage:Hide() end
 	else
 		local br, bg, bb = XComp.GetBgColor()
 		f:SetBackdropColor(br, bg, bb, GetBgAlpha())
-		f:SetBackdropBorderColor(ar, ag, ab, 1)
-		if f.bgImage then
-			f.bgImage:Show()
-			f.bgImage:SetAlpha(GetBgAlpha())
-		end
+		local dr, dg, db = XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3]
+		f:SetBackdropBorderColor(dr, dg, db, 1)
 	end
 
 	f.title:SetTextColor(ar, ag, ab, 1)
@@ -587,14 +515,13 @@ end
 function U:ApplySideStripTheme()
 	local strip = self.sideStrip
 	if not strip then return end
-	local ar, ag, ab = XComp.GetAccentColor()
 	if IsFrameless() then
 		strip:SetBackdropColor(0, 0, 0, 0)
 		strip:SetBackdropBorderColor(0, 0, 0, 0)
 	else
 		local br, bg, bb = XComp.GetBgColor()
 		strip:SetBackdropColor(br, bg, bb, GetBgAlpha())
-		strip:SetBackdropBorderColor(ar, ag, ab, 1)
+		strip:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	end
 end
 
@@ -649,10 +576,12 @@ function U:RefreshSideStrip()
 	local vaultLines = XComp.Data:GetVaultProgress()
 	if #vaultLines > 0 then
 		local vaultBtn = MakeSideIcon(strip, nil, anchorTo)
-		-- Gold/unlocked variant (2026-08-16 correction) - the gray "locked"
-		-- atlas read as a dim, washed-out icon. Real atlas either way, from
-		-- Blizzard's own Blizzard_WeeklyRewards.lua source.
-		vaultBtn.icon:SetAtlas("evergreen-weeklyrewards-reward-unlocked")
+		-- 2026-09-29, final art: custom-generated vault door art (Jason's own
+		-- ChatGPT-generated image, downsampled 1254x1254 -> 64x64 with
+		-- quality resampling, real alpha channel - no chroma-key needed).
+		-- Replaces two earlier guesses at reusing an existing Blizzard
+		-- texture, both wrong.
+		vaultBtn.icon:SetTexture("Interface\\AddOns\\XalsCompendium\\Textures\\GreatVaultIcon_v1.png")
 		vaultBtn:SetScript("OnClick", function()
 			if not C_AddOns.IsAddOnLoaded("Blizzard_WeeklyRewards") then
 				C_AddOns.LoadAddOn("Blizzard_WeeklyRewards")
@@ -737,7 +666,7 @@ function U:ShowCompletionToast(text)
 	end
 
 	local ar, ag, ab = XComp.GetAccentColor()
-	toast:SetBackdropBorderColor(ar, ag, ab, 1)
+	toast:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	toast.label:SetTextColor(ar, ag, ab, 1)
 	toast.label:SetText(text)
 	toast:SetAlpha(1)
@@ -778,8 +707,8 @@ function U:ShowDiagnostics()
 		})
 		local br, bg, bb = XComp.GetBgColor()
 		f:SetBackdropColor(br, bg, bb, 0.97)
+		f:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 		local ar, ag, ab = XComp.GetAccentColor()
-		f:SetBackdropBorderColor(ar, ag, ab, 1)
 
 		f:SetMovable(true)
 		f:EnableMouse(true)
@@ -788,7 +717,7 @@ function U:ShowDiagnostics()
 		f:SetScript("OnDragStop", f.StopMovingOrSizing)
 
 		local title = f:CreateFontString(nil, "OVERLAY")
-		title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 18, "")
+		title:SetFont(XComp.TITLE_FONT_PATH, 18, "")
 		title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
 		title:SetTextColor(ar, ag, ab, 1)
 		title:SetText("Xal's Compendium - Diagnostics")
@@ -866,8 +795,8 @@ function U:ShowUntrackedExport()
 		})
 		local br, bg, bb = XComp.GetBgColor()
 		f:SetBackdropColor(br, bg, bb, 0.97)
+		f:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 		local ar, ag, ab = XComp.GetAccentColor()
-		f:SetBackdropBorderColor(ar, ag, ab, 1)
 
 		f:SetMovable(true)
 		f:EnableMouse(true)
@@ -876,7 +805,7 @@ function U:ShowUntrackedExport()
 		f:SetScript("OnDragStop", f.StopMovingOrSizing)
 
 		local title = f:CreateFontString(nil, "OVERLAY")
-		title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 18, "")
+		title:SetFont(XComp.TITLE_FONT_PATH, 18, "")
 		title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
 		title:SetTextColor(ar, ag, ab, 1)
 		title:SetText("Xal's Compendium - Auto-Detected Quests")
@@ -928,6 +857,10 @@ function U:Toggle()
 	if f:IsShown() then
 		f:Hide()
 	else
+		-- Clears the userClosed guard (see the frame's own Show() override,
+		-- set up in CreateMainFrame) - this is the ONE legitimate path that's
+		-- allowed to actually reopen it.
+		f.userClosed = false
 		f:Show()
 		self:RefreshSections()
 		self:ApplyIdleAlpha()
@@ -954,6 +887,16 @@ local ZONE_COLORS = {
 	["Vaults of Atal'Utek"] = { 0.68, 0.45, 0.85 },
 	["Housing"] = { 0.85, 0.45, 0.60 },
 	["Silvermoon City"] = { 0.82, 0.68, 0.25 },
+	["Stormwind City"] = { 0.30, 0.50, 0.90 },
+	["Undercity"] = { 0.60, 0.35, 0.70 },
+	-- Added 2026-09-29 - full-catalog sweep (after the Vaults-of-Atal'Utek
+	-- zone-matching bug) found these four real, live-tagged zones were
+	-- never actually registered here, so they were all rendering with the
+	-- generic gray fallback color instead of their own.
+	["Harandar"] = { 0.85, 0.55, 0.20 },
+	["Naigtal"] = { 0.25, 0.70, 0.70 },
+	["Val"] = { 0.80, 0.25, 0.45 },
+	["Tidebound Grotto"] = { 0.20, 0.50, 0.70 },
 	["Legacy"] = { 0.55, 0.55, 0.55 },
 }
 local ZONE_COLOR_DEFAULT = { 0.60, 0.60, 0.60 }
@@ -1034,8 +977,8 @@ local function GetCompletePopup()
 	})
 	local br, bg, bb = XComp.GetBgColor()
 	popup:SetBackdropColor(br, bg, bb, 0.98)
+	popup:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	local ar, ag, ab = XComp.GetAccentColor()
-	popup:SetBackdropBorderColor(ar, ag, ab, 1)
 
 	local label = popup:CreateFontString(nil, "OVERLAY")
 	label:SetFontObject(XComp.BodyFont)
@@ -1081,7 +1024,7 @@ local function ShowCompletePopup(anchorFrame, item, resetEpoch)
 	popup:Show()
 end
 
-local function MakeItemRow(parent, item, indent, resetEpoch)
+local function MakeItemRow(parent, item, indent, resetEpoch, typeTag)
 	local row = CreateFrame("Frame", nil, parent)
 	row:SetHeight(ROW_H)
 	row:EnableMouse(true)
@@ -1096,6 +1039,13 @@ local function MakeItemRow(parent, item, indent, resetEpoch)
 	local text = item.name
 	if numFulfilled and numRequired then
 		text = text .. string.format(" (%d/%d)", numFulfilled, numRequired)
+	end
+	-- The Zone tab mixes Daily and Weekly together under one zone header
+	-- (2026-09-29 mockup), so each row gets a small type tag to keep it
+	-- clear which is which - not needed on the Daily/Weekly/Legacy tabs,
+	-- which are already scoped to one type.
+	if typeTag then
+		text = text .. " |cff888888(" .. typeTag .. ")|r"
 	end
 	label:SetText(text)
 
@@ -1211,7 +1161,7 @@ end
 -- implementation built on our own existing row/anchor system - not based
 -- on or copied from any other addon's code, per the idea-only permission
 -- for this concept.
-local function RenderItemTree(container, item, indent, resetEpoch, hideCompleted, placeFn)
+local function RenderItemTree(container, item, indent, resetEpoch, hideCompleted, placeFn, typeTag)
 	-- Time-gated items (build-plan item 21) - outside their active window,
 	-- skip entirely (self-filtering covers both top-level calls and
 	-- recursive children, one check point instead of duplicating it at
@@ -1232,13 +1182,13 @@ local function RenderItemTree(container, item, indent, resetEpoch, hideCompleted
 		end
 	end
 
-	placeFn(MakeItemRow(container, item, indent, resetEpoch))
+	placeFn(MakeItemRow(container, item, indent, resetEpoch, typeTag))
 
 	if item.children and #item.children > 0 then
 		for _, child in ipairs(item.children) do
 			local childComplete = XComp.Data:GetItemStatus(child, resetEpoch)
 			if not (hideCompleted and childComplete) then
-				RenderItemTree(container, child, indent + 14, resetEpoch, hideCompleted, placeFn)
+				RenderItemTree(container, child, indent + 14, resetEpoch, hideCompleted, placeFn, typeTag)
 			end
 		end
 	end
@@ -1302,7 +1252,8 @@ function U:RefreshSections()
 	-- vanishes just because it hasn't been zone-tagged yet.
 	local ZONE_RENDER_ORDER = {
 		"Eversong Woods", "Zul'Aman", "Voidstorm", "The Coiled Isle",
-		"Vaults of Atal'Utek", "Housing", "Legacy",
+		"Vaults of Atal'Utek", "Housing", "Silvermoon City", "Harandar",
+		"Naigtal", "Val", "Tidebound Grotto", "Stormwind City", "Undercity", "Legacy",
 	}
 	local groupOrder, groups = {}, {}
 	local function GetGroup(name)
@@ -1320,13 +1271,44 @@ function U:RefreshSections()
 	-- The subtitle count is scoped to this same selection, matching the
 	-- mockup ("Weekly - 5/30 complete", not a combined grand total).
 	local selectedType = (XComp_DB.settings and XComp_DB.settings.selectedType) or "weekly"
+	-- "Zone" is a real 4th tab (2026-09-29, leftmost per Jason's own
+	-- ordering: Zone/Daily/Weekly/Legacy), not a toggle layered onto the
+	-- existing tabs. It shows Daily AND Weekly together, unconditionally
+	-- narrowed to whatever zone you're standing in right now (live
+	-- detection, same as the floating icon's badge). Legacy is untouched -
+	-- it keeps its own separate expansion checklist, unaffected by this.
+	local isZoneTab = selectedType == "zone"
+	-- currentZone (single name) is for DISPLAY only (the subtitle);
+	-- currentZoneNames (a set) is what actually filters items - includes
+	-- every sub-area physically inside the zone too (e.g. "Vaults of
+	-- Atal'Utek" counts while standing in "The Coiled Isle" proper - real
+	-- bug, confirmed 2026-09-29, "vaults are in this zone"). See
+	-- Data.lua:GetCurrentZoneNames.
+	local currentZone = isZoneTab and XComp.Data:GetCurrentZoneName() or nil
+	local currentZoneNames = isZoneTab and XComp.Data:GetCurrentZoneNames() or nil
+	-- Separate from overallCompleted/overallTotal below - those come from
+	-- XComp.Data:CountType, which is unfiltered (the WHOLE type's count,
+	-- every zone). Real bug, confirmed via screenshot TWICE now: first the
+	-- Zone tab's subtitle showed that unfiltered total ("8/66") while the
+	-- rendered list only had 7 items; the first attempted fix counted every
+	-- item that passed the zone filter ("1/15"), which still didn't match
+	-- the rendered list because it didn't exclude rotating quests that
+	-- aren't currently active - the same exclusion RenderGroup below
+	-- already applies before it ever draws a row. Fixed for real this time
+	-- by accumulating from RenderGroup's OWN already-correct per-group
+	-- totals (the same numbers each zone header visibly shows) instead of
+	-- a separate, differently-filtered count - this literally cannot
+	-- disagree with what's on screen, because it's the same numbers.
+	local zoneCompleted, zoneTotal = 0, 0
 	for _, tier in ipairs(XComp.Data.Catalog.tiers) do
-		local tierMatches = (selectedType == "legacy" and tier.key == "legacy")
+		local tierMatches = (selectedType == "legacy" and tier.key == "legacy" and XComp.Options:IsLegacyEnabled())
 			or (selectedType ~= "legacy" and tier.key == "current")
 		if tierMatches then
 			for _, typeSection in ipairs(XComp.Options:GetOrderedTypes(tier)) do
-				if XComp.Options:IsTypeEnabled(typeSection.key)
-					and (selectedType == "legacy" or typeSection.key == selectedType) then
+				local typeMatches = selectedType == "legacy"
+					or (isZoneTab and (typeSection.key == "daily" or typeSection.key == "weekly"))
+					or typeSection.key == selectedType
+				if XComp.Options:IsTypeEnabled(typeSection.key) and typeMatches then
 					local resetEpoch = XComp.Data:GetResetEpoch(typeSection.resetType)
 					local typeCompleted, typeTotal = XComp.Data:CountType(typeSection)
 					XComp.Data:UpdateStreak(tier.key, typeSection, resetEpoch, typeCompleted, typeTotal)
@@ -1336,7 +1318,20 @@ function U:RefreshSections()
 					for _, category in ipairs(XComp.Options:GetOrderedCategories(typeSection)) do
 						for _, item in ipairs(category.items) do
 							local groupName = item.zone or category.label
-							table.insert(GetGroup(groupName), { item = item, resetEpoch = resetEpoch })
+							-- Legacy is old-expansion catch-up content spanning
+							-- way more zones than Current ever will (71+
+							-- quests at once, per Jason's own count) - narrowed
+							-- down to whichever zones are actually picked on
+							-- the General settings page, instead of always
+							-- dumping every one of them at once.
+							local passesZoneTab = not isZoneTab or (item.zone and currentZoneNames[item.zone])
+							if (tier.key ~= "legacy" or XComp.Options:IsLegacyZoneEnabled(groupName)) and passesZoneTab then
+								table.insert(GetGroup(groupName), {
+									item = item,
+									resetEpoch = resetEpoch,
+									typeTag = isZoneTab and typeSection.key or nil,
+								})
+							end
 						end
 					end
 				end
@@ -1362,6 +1357,14 @@ function U:RefreshSections()
 			end
 		end
 		local groupTotal = #incomplete + #completed
+		-- Accumulated here, BEFORE the early-returns below, so the Zone
+		-- tab's subtitle counts every matching item regardless of the Hide
+		-- Completed toggle or a collapsed section - same as how every other
+		-- tab's subtitle already behaves.
+		if isZoneTab then
+			zoneTotal = zoneTotal + groupTotal
+			zoneCompleted = zoneCompleted + #completed
+		end
 		if groupTotal == 0 then return end
 		if hideCompleted and #incomplete == 0 then return end
 
@@ -1371,11 +1374,11 @@ function U:RefreshSections()
 
 		if not IsSectionCollapsed(groupName) then
 			for _, e in ipairs(incomplete) do
-				RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow)
+				RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow, e.typeTag)
 			end
 			if not hideCompleted then
 				for _, e in ipairs(completed) do
-					RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow)
+					RenderItemTree(container, e.item, INDENT_TYPE, e.resetEpoch, hideCompleted, PlaceRow, e.typeTag)
 				end
 			end
 		end
@@ -1394,10 +1397,20 @@ function U:RefreshSections()
 	end
 
 	local viewLabels = { daily = "Daily", weekly = "Weekly", legacy = "Legacy" }
-	f.overallLabel:SetText(string.format("%s - %d/%d complete", viewLabels[selectedType], overallCompleted, overallTotal))
+	-- Zone tab's subtitle names the actual zone instead of the tab, since
+	-- "Zone" alone says nothing useful on its own - and uses the
+	-- zone-filtered counters, NOT overallCompleted/overallTotal (those are
+	-- the whole type's unfiltered count, every zone - real bug, still
+	-- showing "8/66" after the first fix because this line never actually
+	-- got switched over to the zoneCompleted/zoneTotal it was already
+	-- computing).
+	local viewLabel = isZoneTab and ("Zone: " .. (currentZone or "Unknown")) or viewLabels[selectedType]
+	local shownCompleted = isZoneTab and zoneCompleted or overallCompleted
+	local shownTotal = isZoneTab and zoneTotal or overallTotal
+	f.overallLabel:SetText(string.format("%s - %d/%d complete", viewLabel, shownCompleted, shownTotal))
 	if f.RefreshTabHighlight then f.RefreshTabHighlight() end
 	self:RefreshSideStrip()
-	self:ApplyMinimizedState()
+	if XComp.RefreshFloatingIcon then XComp.RefreshFloatingIcon() end
 
 	-- Scroll child height must always match actual content, regardless of
 	-- auto-size settings - this is what makes overflow physically
@@ -1412,7 +1425,7 @@ function U:RefreshSections()
 	-- escape hatch rather than being stuck with it. Content beyond the cap
 	-- simply scrolls within the window instead of growing it further.
 	local autoSize = not (XComp_DB.settings and XComp_DB.settings.autoSize == false)
-	if autoSize and not (XComp_DB.settings and XComp_DB.settings.minimized) then
+	if autoSize then
 		local HEADER_AND_FOOTER = 154 -- top offset (68) + tab row (20) + tab row gap (8) + content gap (8) + bottom padding (40) + border padding (10)
 		local minH, maxH = 200, 800
 		local targetH = HEADER_AND_FOOTER + contentHeight
