@@ -7,7 +7,7 @@
 -- .toc at runtime) against the last version this player actually saw, and
 -- only pops up when they differ.
 --
--- Claude already writes CHANGELOG.md by hand before every release, in Dev,
+-- CHANGELOG.md already gets written by hand before every release, in Dev,
 -- before Jason ever commits/pushes anything - same moment, update WHATS_NEW
 -- below (the "date" field and the intro/sections content) to match. It's
 -- one more file touched during normal release prep, nothing extra for Jason
@@ -27,16 +27,23 @@ local Brand = addonTable.BrandStyle
 -- ── Update this block every release to match CHANGELOG.md ──────
 -- (no "version" field here on purpose - see note above)
 W.WHATS_NEW = {
-    date = "August 12, 2026",
-    intro = "A bigger update than planned - the whole addon now matches the branded look, plus new behavior and a fixed bug on the weekly dungeon board.",
+    date = "October 24, 2026",
+    intro = "Compendium now follows you around: a floating icon, a Zone tab for wherever you are, and a fresh look across the whole addon.",
     sections = {
         { heading = "New", items = {
-            "Fade when idle - the tracker fades to fully invisible when you're not moused over it, and snaps back on hover. Adjustable in Appearance settings.",
-            "Minimize button - collapses the tracker into a small \"D / W\" bar showing Daily/Weekly items left, so it can stay tucked away without closing.",
-            "Real minimap icon - a custom parchment-and-quill icon instead of the placeholder look.",
+            "Floating icon - shows whenever any daily or weekly is still open, with a number for what's left in the zone you're standing in. Drag it anywhere; size and visibility are in settings.",
+            "Zone tab - the first tab, showing your dailies and weeklies together for your current zone.",
+            "Legacy is now opt-in - pick which old expansions to track from a dropdown in settings. Nothing shows until you choose.",
+            "Hallow's End dailies, shown only while the event is running.",
+            "Dozens more verified quests, including the gathering profession weeklies, Timewalking weeklies, and Midnight Delves and Dungeons.",
+        } },
+        { heading = "Changed", items = {
+            "New branded look everywhere - dark red accents, new fonts, and plain text-link buttons.",
+            "The minimize bar is gone.",
         } },
         { heading = "Fixed", items = {
-            "The weekly dungeon board now correctly tracks as one rotating slot instead of showing all 5 possible dungeons as active every week.",
+            "Closing the tracker now keeps it closed.",
+            "Zone and tab counts now match what's actually listed.",
         } },
     },
 }
@@ -91,7 +98,7 @@ local function BuildFrame(installedVersion)
     -- "installedVersion" is the REAL live version (from CheckAndShow), not a
     -- hand-typed field - it always matches whatever actually got tagged.
     local verLine = Brand.FS(f, "Version " .. installedVersion .. (data.date and ("  ·  " .. data.date) or ""),
-        "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "", Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
+        Brand.BODY_FONT_PATH, 12, "", Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
     verLine:SetPoint("TOP", f, "TOP", 0, -58)
     verLine:SetJustifyH("CENTER")
 
@@ -99,7 +106,7 @@ local function BuildFrame(installedVersion)
 
     local y = 92
     if data.intro and data.intro ~= "" then
-        local intro = Brand.FS(f, data.intro, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "", 0.85, 0.85, 0.85)
+        local intro = Brand.FS(f, data.intro, Brand.BODY_FONT_PATH, 12, "", 0.85, 0.85, 0.85)
         intro:SetPoint("TOPLEFT", f, "TOPLEFT", 30, -y)
         intro:SetWidth(FW - 60)
         intro:SetJustifyH("LEFT")
@@ -108,13 +115,13 @@ local function BuildFrame(installedVersion)
     end
 
     for _, section in ipairs(data.sections or {}) do
-        local head = Brand.FS(f, section.heading, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 13, "OUTLINE",
-            Brand.ACCENT[1], Brand.ACCENT[2], Brand.ACCENT[3])
+        local head = Brand.FS(f, section.heading, Brand.BODY_FONT_PATH_SEMIBOLD, 13, "OUTLINE",
+            Brand.HEADER_COLOR[1], Brand.HEADER_COLOR[2], Brand.HEADER_COLOR[3])
         head:SetPoint("TOPLEFT", f, "TOPLEFT", 30, -y)
         y = y + 20
 
         for _, item in ipairs(section.items or {}) do
-            local bullet = Brand.FS(f, "-  " .. item, "Interface\\AddOns\\XalsCompendium\\Fonts\\FiraSans-Medium.ttf", 12, "",
+            local bullet = Brand.FS(f, "-  " .. item, Brand.BODY_FONT_PATH, 12, "",
                 Brand.GOLD[1], Brand.GOLD[2], Brand.GOLD[3])
             bullet:SetPoint("TOPLEFT", f, "TOPLEFT", 36, -y)
             bullet:SetWidth(FW - 76)
@@ -125,7 +132,7 @@ local function BuildFrame(installedVersion)
         y = y + 10
     end
 
-    local closeBtn = Brand.MakeButton(f, "Got it", 110, 28, function()
+    local closeBtn = Brand.MakeCloseButton(f, function()
         f:Hide()
     end)
     closeBtn:SetPoint("BOTTOM", f, "BOTTOM", 0, 18)
