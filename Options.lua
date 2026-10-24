@@ -13,14 +13,21 @@
 --      ADDITIONAL/secondary method, for players who go looking there out
 --      of habit - not the one we promote as "the" settings menu.
 --
--- THREE pages within each path (real separate sections, not one long list,
--- per explicit user request - matches XalsXpeditedRoutes' SettingsPanel.lua,
+-- Pages within each path (real separate sections, not one long list, per
+-- explicit user request - matches XalsXpeditedRoutes' SettingsPanel.lua,
 -- which splits into Waypoint/Map Markers/Gather Tally/Database/Integrations
--- rather than one long page): General (tracked sections + auto-size),
--- Appearance (frameless/transparency/scale), and Colors (accent + background
--- color). Native panel uses genuine Settings.RegisterCanvasLayoutSubcategory
--- pages; standalone window uses a simple tab switcher between three
--- containers in the same frame.
+-- rather than one long page): General (tracked sections + auto-size) and
+-- Appearance (frameless/transparency/scale/icon). Native panel uses genuine
+-- Settings.RegisterCanvasLayoutSubcategory pages; standalone window uses a
+-- simple tab switcher between containers in the same frame.
+--
+-- Accent/background color and text font/outline/size are NOT
+-- player-customizable (2026-09-29 correction - a prior "Colors" settings
+-- page let players override both away from the current brand look, which
+-- defeated the point of having one). XComp.GetAccentColor()/GetBgColor()
+-- and the TitleFont/BodyFont font objects still exist as the single source
+-- of truth every file reads from, they just always resolve to the fixed
+-- brand values now - see Core.lua.
 
 XComp.Options = XComp.Options or {}
 local O = XComp.Options
@@ -52,42 +59,72 @@ function O:SetTypeEnabled(key, value)
 	EnsureTypeEnabledTable()[key] = value
 end
 
+-------------------------------------------------
+-- Legacy tier enable/disable + per-zone selection (2026-09-29) - Legacy
+-- isn't a "type" like Daily/Weekly/One-time (shared across both tiers), it's
+-- a whole TIER, so it needs its own toggle rather than reusing
+-- IsTypeEnabled. Opt-IN, not opt-out (corrected same day - the first pass
+-- had this backwards): with no zones checked, Legacy contributes nothing at
+-- all, to both the tracker's Legacy tab AND the floating icon's count.
+-- Checking a zone is what turns it on for both.
+-------------------------------------------------
+function O:IsLegacyEnabled()
+	local s = XComp_DB.settings
+	if not s or s.legacyEnabled == nil then return true end
+	return s.legacyEnabled
+end
+
+function O:SetLegacyEnabled(value)
+	XComp_DB.settings = XComp_DB.settings or {}
+	XComp_DB.settings.legacyEnabled = value
+end
+
+-- Whether a given Legacy group name (a real zone, or a category label for
+-- anything zoneless) should render/count. Opt-in: nothing shows until it's
+-- actually checked.
+function O:IsLegacyZoneEnabled(zoneName)
+	local zones = XComp_DB.settings and XComp_DB.settings.legacyZones
+	if not zones then return false end
+	return zones[zoneName] == true
+end
+
+function O:SetLegacyZoneEnabled(zoneName, value)
+	XComp_DB.settings = XComp_DB.settings or {}
+	XComp_DB.settings.legacyZones = XComp_DB.settings.legacyZones or {}
+	XComp_DB.settings.legacyZones[zoneName] = value or nil
+end
+
 -- Tracks every populated container of each kind so ResetToDefaults can
 -- refresh all of them (native General, native Appearance, standalone
 -- General, standalone Appearance) regardless of which one the user
 -- clicked "Reset" from.
 local generalContainers = {}
 local appearanceContainers = {}
-local colorsContainers = {}
 local backupContainers = {}
 
 -- Standing rule: every customizable feature needs a small, unobtrusive
 -- "reset to default" option. Clears per-type enable/disable overrides and
--- appearance settings (frameless/bgAlpha/scale/accentColor) back to
--- default - one unified reset rather than a separate button per
--- customizable feature.
+-- appearance settings (frameless/bgAlpha/scale) back to default - one
+-- unified reset rather than a separate button per customizable feature.
 function O:ResetToDefaults()
 	XComp_DB.settings.typeEnabled = {}
 	XComp_DB.settings.frameless = nil
 	XComp_DB.settings.bgAlpha = nil
 	XComp_DB.settings.scale = nil
 	XComp_DB.settings.idleAlpha = nil
-	XComp_DB.settings.minimized = nil
 	XComp_DB.settings.typeOrder = nil
 	XComp_DB.settings.categoryOrder = nil
-	XComp_DB.accentColor = nil
-	XComp_DB.bgColor = nil
+	XComp_DB.settings.floatingIconSize = nil
+	if XComp.SetFloatingIconSize then XComp.SetFloatingIconSize(52) end
 	if XComp.UI then
 		XComp.UI:ApplyTheme()
 		XComp.UI:ApplyIdleAlpha()
-		XComp.UI:ApplyMinimizedState()
 		if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 			XComp.UI:RefreshSections()
 		end
 	end
 	for _, c in ipairs(generalContainers) do self:PopulateGeneralRows(c) end
 	for _, c in ipairs(appearanceContainers) do self:PopulateAppearanceRows(c) end
-	for _, c in ipairs(colorsContainers) do self:PopulateColorsRows(c) end
 end
 
 -------------------------------------------------
@@ -99,7 +136,7 @@ end
 -- not two independent copies with independent order.
 -------------------------------------------------
 local TYPE_KEYS = { "daily", "weekly", "onetime" }
-local CATEGORY_KEYS = { "greatVault", "currencies", "weeklyEvents", "professions", "reputation", "storyCampaign", "worldQuests", "custom" }
+local CATEGORY_KEYS = { "greatVault", "currencies", "weeklyEvents", "professions", "reputation", "storyCampaign", "worldQuests", "custom", "holidayEvents" }
 
 local function EnsureOrderTable(settingsKey, defaultKeys)
 	XComp_DB.settings = XComp_DB.settings or {}
@@ -181,23 +218,20 @@ end
 -- standalone window - two separate, independent access paths to the same
 -- settings, not one path styled two ways)
 -------------------------------------------------
--- Flat, self-drawn button - Xal's shared brand button (locked in 2026-08-09,
--- confirmed as the standard for every addon). Semi-transparent dark fill,
--- no bevel/gradient, border hand-drawn from 4 pixel-snapped textures instead
--- of Blizzard's backdrop-edge system (which doesn't render symmetric at a
--- non-integer UI Scale). Border is the addon's live accent color (not a
--- fixed grey) - ties buttons back to the rest of the panel. Selection is
--- carried by fill brightness + label color, NOT border color (border stays
--- accent either way). Used for every button in the addon instead of
--- Blizzard's chunky UIPanelButtonTemplate. Optional :SetSelected() is only
--- used by tabs.
-local LINE_THICKNESS = 2
--- Unselected label color - warm amber-orange (matched from WoW's own "World
--- Quests" header text). Selected label is pure white.
-local BTN_LABEL_UNSELECTED = { 0.95, 0.60, 0.10 }
+-- Text-link button - Xal's current shared brand button (superseded the old
+-- boxed/bordered version 2026-08-17/18, "I don't like the blocky look").
+-- Plain text, no fill, no border - selection/hover carried entirely by
+-- label color/brightness. Unselected label is the addon's fixed accent
+-- color by default; selected/hover is white. A standalone window's own
+-- SIDEBAR nav tabs override the unselected color to XComp.SIDEBAR_UNSELECTED
+-- instead (via :SetUnselectedColor() below) - narrowly scoped to sidebar
+-- links only, per the family standard. Used for every button in the addon
+-- instead of Blizzard's chunky UIPanelButtonTemplate. Optional
+-- :SetSelected() is only used by tabs.
+local LINE_THICKNESS = 2 -- still used by the header divider below
 
 local function MakeFlatButton(parent, anchorTo, width, text, onClick)
-	local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+	local btn = CreateFrame("Button", nil, parent)
 	PixelUtil.SetSize(btn, width, 22)
 	if anchorTo then
 		btn:SetPoint("LEFT", anchorTo, "RIGHT", 4, 0)
@@ -206,67 +240,62 @@ local function MakeFlatButton(parent, anchorTo, width, text, onClick)
 	else
 		btn:SetPoint("LEFT", parent, "LEFT", 0, 0)
 	end
-	btn:SetBackdrop({
-		bgFile = "Interface\\Buttons\\WHITE8x8",
-	})
-	btn:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
-
-	local borderTop = btn:CreateTexture(nil, "ARTWORK")
-	PixelUtil.SetPoint(borderTop, "TOPLEFT", btn, "TOPLEFT", 0, 0)
-	PixelUtil.SetPoint(borderTop, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-	PixelUtil.SetHeight(borderTop, LINE_THICKNESS)
-
-	local borderBottom = btn:CreateTexture(nil, "ARTWORK")
-	PixelUtil.SetPoint(borderBottom, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
-	PixelUtil.SetPoint(borderBottom, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
-	PixelUtil.SetHeight(borderBottom, LINE_THICKNESS)
-
-	local borderLeft = btn:CreateTexture(nil, "ARTWORK")
-	PixelUtil.SetPoint(borderLeft, "TOPLEFT", btn, "TOPLEFT", 0, 0)
-	PixelUtil.SetPoint(borderLeft, "BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
-	PixelUtil.SetWidth(borderLeft, LINE_THICKNESS)
-
-	local borderRight = btn:CreateTexture(nil, "ARTWORK")
-	PixelUtil.SetPoint(borderRight, "TOPRIGHT", btn, "TOPRIGHT", 0, 0)
-	PixelUtil.SetPoint(borderRight, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
-	PixelUtil.SetWidth(borderRight, LINE_THICKNESS)
-
-	local function SetBorderColor(r, g, b, a)
-		borderTop:SetColorTexture(r, g, b, a)
-		borderBottom:SetColorTexture(r, g, b, a)
-		borderLeft:SetColorTexture(r, g, b, a)
-		borderRight:SetColorTexture(r, g, b, a)
-	end
-	do
-		local ar, ag, ab = XComp.GetAccentColor()
-		SetBorderColor(ar, ag, ab, 1)
-	end
 
 	local label = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	label:SetPoint("CENTER")
 	label:SetText(text)
-	label:SetTextColor(BTN_LABEL_UNSELECTED[1], BTN_LABEL_UNSELECTED[2], BTN_LABEL_UNSELECTED[3], 1)
+	local ar, ag, ab = XComp.GetAccentColor()
+	label:SetTextColor(ar, ag, ab, 1)
 	btn.label = label
+	btn.unselectedColor = { ar, ag, ab }
 
 	btn:SetScript("OnEnter", function(self)
-		if not self.selected then self:SetBackdropColor(0.18, 0.18, 0.18, 0.75) end
+		if not self.selected then label:SetTextColor(1, 1, 1, 1) end
 	end)
 	btn:SetScript("OnLeave", function(self)
-		if not self.selected then self:SetBackdropColor(0.1, 0.1, 0.1, 0.6) end
+		if not self.selected then
+			local c = self.unselectedColor
+			label:SetTextColor(c[1], c[2], c[3], 1)
+		end
 	end)
 	btn:SetScript("OnClick", onClick)
 
+	btn.selectedColor = { 1, 1, 1 }
+
 	function btn:SetSelected(selected)
 		self.selected = selected
-		local ar, ag, ab = XComp.GetAccentColor()
-		SetBorderColor(ar, ag, ab, 1)
 		if selected then
-			self:SetBackdropColor(0.22, 0.22, 0.22, 0.85)
-			label:SetTextColor(1, 1, 1, 1)
+			local c = self.selectedColor
+			label:SetTextColor(c[1], c[2], c[3], 1)
 		else
-			self:SetBackdropColor(0.1, 0.1, 0.1, 0.6)
-			label:SetTextColor(BTN_LABEL_UNSELECTED[1], BTN_LABEL_UNSELECTED[2], BTN_LABEL_UNSELECTED[3], 1)
+			local c = self.unselectedColor
+			label:SetTextColor(c[1], c[2], c[3], 1)
 		end
+	end
+
+	-- Sidebar tabs call these once, right after creation, to switch their
+	-- selected/unselected colors away from the default white/accent pair to
+	-- the sidebar-specific accent/muted-blue-gray pair instead - narrowly
+	-- scoped to a standalone window's own sidebar nav, per the family
+	-- standard (a selected sidebar link is the accent color, not white).
+	function btn:SetSelectedColor(r, g, b)
+		self.selectedColor = { r, g, b }
+		if self.selected then label:SetTextColor(r, g, b, 1) end
+	end
+
+	function btn:SetUnselectedColor(r, g, b)
+		self.unselectedColor = { r, g, b }
+		if not self.selected then label:SetTextColor(r, g, b, 1) end
+	end
+
+	-- Bumps the label's font size, keeping whatever font/flags it already
+	-- has - per the family's confirmed settings-panel typography standard
+	-- (label text at 14px, Blizzard's ~10-12px default reads too small
+	-- against busy WoW terrain). Sidebar nav tabs call this; ordinary
+	-- buttons elsewhere keep the default size.
+	function btn:SetFontSize(size)
+		local fontPath, _, flags = label:GetFont()
+		label:SetFont(fontPath, size, flags)
 	end
 
 	return btn
@@ -276,14 +305,122 @@ end
 -- both this file and UI.lua can use it.
 local MakeCheckbox = XComp.MakeCheckbox
 
--- Builds the common header (title, divider, reset button) onto any parent
--- frame - shared between the native panel and the standalone window so
--- both look identical without duplicating the layout code.
-local function BuildHeader(parent, onReset)
+-------------------------------------------------
+-- Standing Discord link (2026-09-29) - the real Discord wordmark logo as
+-- the clickable element itself, no separate text label, matching the
+-- current family standard (confirmed 2026-09-20 on Roster Roundup: "just
+-- the logo, no separate text"). Lua can't open a browser directly, so
+-- clicking it pops a copy-a-URL box instead. Lives at the bottom of the
+-- standalone window's sidebar, visible on every page - see
+-- BuildStandaloneWindow below.
+-------------------------------------------------
+local DISCORD_URL = "https://discord.gg/9SwrQDJeCe"
+local DISCORD_LOGO_ICON = "Interface\\AddOns\\XalsCompendium\\Textures\\DiscordLogo.png"
+local DISCORD_LOGO_ASPECT = 42 / 280
+
+local copyBoxFrame
+
+local function ShowCopyBox(caption, url)
+	if not url or url == "" then return end
+
+	if not copyBoxFrame then
+		local f = CreateFrame("Frame", "XalsCompendiumCopyBox", UIParent)
+		f:SetSize(360, 130)
+		f:SetPoint("CENTER", UIParent, "CENTER", 0, 220)
+		f:SetFrameStrata("FULLSCREEN_DIALOG")
+		f:SetToplevel(true)
+		f:SetMovable(true)
+		f:EnableMouse(true)
+		f:RegisterForDrag("LeftButton")
+		f:SetScript("OnDragStart", f.StartMoving)
+		f:SetScript("OnDragStop", f.StopMovingOrSizing)
+		f:SetClampedToScreen(true)
+		tinsert(UISpecialFrames, "XalsCompendiumCopyBox")
+
+		local bg = f:CreateTexture(nil, "BACKGROUND")
+		bg:SetAllPoints()
+		bg:SetColorTexture(GetPanelBg())
+
+		local cbr, cbg, cbb = XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3]
+		local border = f:CreateTexture(nil, "ARTWORK")
+		border:SetColorTexture(cbr, cbg, cbb, 1)
+		PixelUtil.SetHeight(border, 2)
+		border:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+		border:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+
+		local car, cag, cab = XComp.GetAccentColor()
+		f.caption = f:CreateFontString(nil, "OVERLAY")
+		f.caption:SetFont(XComp.TITLE_FONT_PATH, 15, "")
+		f.caption:SetTextColor(car, cag, cab, 1)
+		f.caption:SetPoint("TOP", f, "TOP", 0, -14)
+
+		local box = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+		box:SetHeight(22)
+		box:SetPoint("TOPLEFT", f, "TOPLEFT", 24, -46)
+		box:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, -46)
+		box:SetAutoFocus(true)
+		box:SetFontObject("GameFontHighlightSmall")
+		box:SetScript("OnTextChanged", function(self)
+			if self.locked then return end
+			self.locked = true
+			self:SetText(f.url or "")
+			self:HighlightText()
+			self.locked = false
+		end)
+		box:SetScript("OnEscapePressed", function() f:Hide() end)
+		f.box = box
+
+		local hint = f:CreateFontString(nil, "OVERLAY")
+		hint:SetFontObject(XComp.BodyFont)
+		hint:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 2, -6)
+		hint:SetText("Ctrl+C to copy")
+
+		XComp.MakeCloseButton(f)
+
+		copyBoxFrame = f
+	end
+
+	copyBoxFrame.url = url
+	copyBoxFrame.caption:SetText(caption or "Copy this link")
+	copyBoxFrame.box.locked = true
+	copyBoxFrame.box:SetText(url)
+	copyBoxFrame.box.locked = false
+	copyBoxFrame:Show()
+	copyBoxFrame.box:SetFocus()
+	copyBoxFrame.box:HighlightText()
+end
+
+local function MakeDiscordLogoLink(parent, width)
+	width = width or 116
+	local btn = CreateFrame("Button", nil, parent)
+	btn:SetSize(width, width * DISCORD_LOGO_ASPECT)
+
+	local logo = btn:CreateTexture(nil, "ARTWORK")
+	logo:SetAllPoints()
+	logo:SetTexture(DISCORD_LOGO_ICON)
+	logo:SetAlpha(0.9)
+	btn.logo = logo
+
+	btn:SetScript("OnEnter", function() logo:SetAlpha(1) end)
+	btn:SetScript("OnLeave", function() logo:SetAlpha(0.9) end)
+	btn:SetScript("OnClick", function()
+		ShowCopyBox("Join us on Discord", DISCORD_URL)
+	end)
+
+	return btn
+end
+
+-- Builds the common header (title, divider) onto any parent frame - shared
+-- between the native panel and the standalone window so both look
+-- identical without duplicating the layout code. "Reset to Defaults" used
+-- to live here (every page), moved to live only on the Backup page instead
+-- (2026-09-29) - it's a real, semi-destructive action, belongs with the
+-- other backup/restore controls, not floating on every single page.
+local function BuildHeader(parent)
 	local ar, ag, ab = XComp.GetAccentColor()
 
 	local title = parent:CreateFontString(nil, "OVERLAY")
-	title:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf", 20, "")
+	title:SetFont(XComp.TITLE_FONT_PATH, 20, "")
 	title:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, -16)
 	title:SetTextColor(ar, ag, ab, 1)
 	title:SetText("Xal's Compendium")
@@ -294,10 +431,6 @@ local function BuildHeader(parent, onReset)
 	divider:SetHeight(LINE_THICKNESS)
 	divider:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
 	divider:SetPoint("RIGHT", parent, "RIGHT", -16, 0)
-
-	local resetBtn = MakeFlatButton(parent, false, 130, "Reset to Defaults", onReset)
-	resetBtn:ClearAllPoints()
-	resetBtn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -16, -16)
 
 	return divider
 end
@@ -497,6 +630,152 @@ function O:PopulateGeneralRows(container)
 	sizeDesc:SetPoint("RIGHT", sizeRow, "RIGHT", 0, 0)
 	sizeDesc:SetJustifyH("LEFT")
 	sizeDesc:SetText("Automatically resize the tracker to fit visible content. Turn off to keep a fixed size (e.g. if resizing ever misbehaves).")
+	-- Real bug fixed 2026-09-29: anchorTo never got reassigned to sizeRow
+	-- after building it, so the Legacy row below ended up anchored to the
+	-- same point as sizeRow itself - both landed on top of one another,
+	-- reading as a garbled overlapping mess (caught via screenshot).
+	anchorTo = sizeRow
+
+	-- Legacy tier toggle (2026-09-29) - Legacy isn't a "type" like Daily/
+	-- Weekly/One-time above (those are shared across both tiers), it's a
+	-- whole separate TIER, so it gets its own row here rather than joining
+	-- that loop.
+	local legacyRow = CreateFrame("Frame", nil, container)
+	legacyRow:SetHeight(ROW_H)
+	legacyRow:ClearAllPoints()
+	if anchorTo then
+		legacyRow:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -ROW_GAP)
+	else
+		legacyRow:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+	end
+	legacyRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+	table.insert(container.rows, legacyRow)
+	totalHeight = totalHeight + ROW_H + ROW_GAP
+	anchorTo = legacyRow
+
+	local legacyCB = MakeCheckbox(legacyRow, 22)
+	legacyCB:SetPoint("TOPLEFT", legacyRow, "TOPLEFT", 0, 0)
+	legacyCB:SetChecked(self:IsLegacyEnabled())
+
+	local legacyName = legacyRow:CreateFontString(nil, "OVERLAY")
+	legacyName:SetFontObject(XComp.TitleFont)
+	legacyName:SetPoint("LEFT", legacyCB, "RIGHT", 6, 8)
+	legacyName:SetPoint("RIGHT", legacyRow, "RIGHT", 0, 0)
+	legacyName:SetJustifyH("LEFT")
+	local lar, lag, lab = XComp.GetAccentColor()
+	legacyName:SetTextColor(lar, lag, lab, 1)
+	legacyName:SetText("Legacy")
+
+	local legacyDesc = legacyRow:CreateFontString(nil, "OVERLAY")
+	legacyDesc:SetFontObject(XComp.BodyFont)
+	legacyDesc:SetPoint("TOPLEFT", legacyName, "BOTTOMLEFT", 0, -4)
+	legacyDesc:SetPoint("RIGHT", legacyRow, "RIGHT", 0, 0)
+	legacyDesc:SetJustifyH("LEFT")
+	legacyDesc:SetText("Old-expansion catch-up content. Nothing shows until you check an expansion below - also counts toward the floating icon once checked.")
+
+	-- Expansion/zone picker - a real dropdown BUTTON, closed by default with
+	-- a live selected-count, NOT an inline checklist sitting jumbled on top
+	-- of the row below it (that was the actual layout bug, on top of the
+	-- anchorTo bug above - confirmed via mockup + screenshot 2026-09-29).
+	-- Expand/collapse state is per-session only (not saved), since it's a
+	-- pure display convenience, not a real setting.
+	local zoneNames = XComp.Data:GetLegacyZoneNames()
+	local selectedCount = 0
+	for _, zoneName in ipairs(zoneNames) do
+		if self:IsLegacyZoneEnabled(zoneName) then selectedCount = selectedCount + 1 end
+	end
+
+	local dropdownBtn = CreateFrame("Button", nil, container, "BackdropTemplate")
+	dropdownBtn:SetHeight(26)
+	dropdownBtn:SetWidth(190)
+	dropdownBtn:SetPoint("TOPLEFT", legacyRow, "BOTTOMLEFT", 28, -8)
+	dropdownBtn:SetBackdrop({
+		bgFile = "Interface\\Buttons\\WHITE8x8",
+		edgeFile = "Interface\\Buttons\\WHITE8x8",
+		edgeSize = 2,
+	})
+	dropdownBtn:SetBackdropColor(0.08, 0.07, 0.12, 1)
+	dropdownBtn:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
+	table.insert(container.rows, dropdownBtn)
+	anchorTo = dropdownBtn
+	totalHeight = totalHeight + 26 + 8 + ROW_GAP
+
+	local dropdownLabel = dropdownBtn:CreateFontString(nil, "OVERLAY")
+	dropdownLabel:SetFontObject(XComp.BodyFont)
+	dropdownLabel:SetPoint("LEFT", dropdownBtn, "LEFT", 10, 0)
+	local dar, dag, dab = XComp.GetAccentColor()
+	dropdownLabel:SetTextColor(dar, dag, dab, 1)
+	local expanded = self.legacyZonesExpanded
+	dropdownLabel:SetText(string.format("Select Expansions (%d selected) %s", selectedCount, expanded and "\226\150\180" or "\226\150\190"))
+
+	dropdownBtn:SetScript("OnClick", function()
+		self.legacyZonesExpanded = not self.legacyZonesExpanded
+		self:PopulateGeneralRows(container)
+	end)
+	dropdownBtn:SetShown(self:IsLegacyEnabled())
+
+	-- Expanded panel - a clean bordered grid, only built at all while open,
+	-- so a closed dropdown costs nothing and can never overlap anything.
+	local zoneGrid
+	if expanded and self:IsLegacyEnabled() then
+		local ZONE_GRID_COLS = 2
+		local ZONE_COL_WIDTH = 190
+		local zoneRowCount = math.max(math.ceil(#zoneNames / ZONE_GRID_COLS), 1)
+		local zoneGridHeight = zoneRowCount * 22 + 16
+
+		zoneGrid = CreateFrame("Frame", nil, container, "BackdropTemplate")
+		zoneGrid:SetHeight(zoneGridHeight)
+		zoneGrid:SetPoint("TOPLEFT", dropdownBtn, "BOTTOMLEFT", 0, -8)
+		zoneGrid:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+		zoneGrid:SetBackdrop({
+			bgFile = "Interface\\Buttons\\WHITE8x8",
+			edgeFile = "Interface\\Buttons\\WHITE8x8",
+			edgeSize = 2,
+		})
+		zoneGrid:SetBackdropColor(0.08, 0.07, 0.12, 1)
+		zoneGrid:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
+		table.insert(container.rows, zoneGrid)
+		anchorTo = zoneGrid
+		totalHeight = totalHeight + zoneGridHeight + ROW_GAP
+
+		if #zoneNames == 0 then
+			local noneText = zoneGrid:CreateFontString(nil, "OVERLAY")
+			noneText:SetFontObject(XComp.BodyFont)
+			noneText:SetPoint("TOPLEFT", zoneGrid, "TOPLEFT", 10, -8)
+			noneText:SetText("No Legacy content in the catalog yet.")
+		end
+
+		for i, zoneName in ipairs(zoneNames) do
+			local col = (i - 1) % ZONE_GRID_COLS
+			local rowIdx = math.floor((i - 1) / ZONE_GRID_COLS)
+			local zcb = MakeCheckbox(zoneGrid, 16)
+			zcb:SetPoint("TOPLEFT", zoneGrid, "TOPLEFT", 10 + col * ZONE_COL_WIDTH, -8 - rowIdx * 22)
+			zcb:SetChecked(self:IsLegacyZoneEnabled(zoneName))
+			zcb.OnToggle = function(btn)
+				self:SetLegacyZoneEnabled(zoneName, btn:GetChecked() and true or false)
+				self:PopulateGeneralRows(container)
+				if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
+					XComp.UI:RefreshSections()
+				end
+			end
+			local zlabel = zoneGrid:CreateFontString(nil, "OVERLAY")
+			zlabel:SetFontObject(XComp.BodyFont)
+			zlabel:SetPoint("LEFT", zcb, "RIGHT", 4, 0)
+			zlabel:SetJustifyH("LEFT")
+			zlabel:SetText(zoneName)
+		end
+	end
+
+	-- Full rebuild on toggle (not just SetShown) so the container's height
+	-- recalculates too - otherwise hiding the dropdown/grid leaves a dead
+	-- gap where it used to be instead of the page actually shrinking.
+	legacyCB.OnToggle = function(btn)
+		self:SetLegacyEnabled(btn:GetChecked() and true or false)
+		self:PopulateGeneralRows(container)
+		if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
+			XComp.UI:RefreshSections()
+		end
+	end
 
 	container:SetHeight(math.max(totalHeight, 1))
 end
@@ -588,6 +867,70 @@ function O:PopulateAppearanceRows(container)
 	stripDesc:SetPoint("RIGHT", stripRow, "RIGHT", 0, 0)
 	stripDesc:SetJustifyH("LEFT")
 	stripDesc:SetText("A small icon panel outside the tracker's right edge for Great Vault progress and tracked currencies. Turn off if you only want quest content.")
+
+	-- Floating icon toggle + reposition - the icon itself has no visible
+	-- chrome to right-click, so if it ever ends up dragged off-screen (or a
+	-- resolution/UI-scale change moves it there) this is the only way back;
+	-- same reason every other floating icon in the family needs a menu
+	-- entry, not just a drag handle.
+	local iconRow = NextAppearRow(APPEAR_ROW_H)
+	local iconCB = MakeCheckbox(iconRow, 22)
+	iconCB:SetPoint("TOPLEFT", iconRow, "TOPLEFT", 0, 0)
+	iconCB:SetChecked(not (XComp_DB.settings and XComp_DB.settings.showFloatingIcon == false))
+	iconCB.OnToggle = function(btn)
+		XComp_DB.settings = XComp_DB.settings or {}
+		XComp_DB.settings.showFloatingIcon = btn:GetChecked() and true or false
+		if XComp.RefreshFloatingIcon then XComp.RefreshFloatingIcon() end
+	end
+	local iconName = iconRow:CreateFontString(nil, "OVERLAY")
+	iconName:SetFontObject(XComp.TitleFont)
+	iconName:SetPoint("LEFT", iconCB, "RIGHT", 6, 8)
+	local ilr, ilg, ilb = XComp.GetAccentColor()
+	iconName:SetTextColor(ilr, ilg, ilb, 1)
+	iconName:SetText("Show floating icon")
+	local iconDesc = iconRow:CreateFontString(nil, "OVERLAY")
+	iconDesc:SetFontObject(XComp.BodyFont)
+	iconDesc:SetPoint("TOPLEFT", iconName, "BOTTOMLEFT", 0, -4)
+	iconDesc:SetPoint("RIGHT", iconRow, "RIGHT", -140, 0)
+	iconDesc:SetJustifyH("LEFT")
+	iconDesc:SetText("A draggable on-screen icon that shows up whenever daily/weekly quests are still outstanding, separate from the minimap button.")
+	local iconResetBtn = MakeFlatButton(iconRow, false, 130, "Reset Icon Position", function()
+		if XComp.ResetFloatingIconPosition then XComp.ResetFloatingIconPosition() end
+	end)
+	iconResetBtn:ClearAllPoints()
+	iconResetBtn:SetPoint("TOPRIGHT", iconRow, "TOPRIGHT", 0, 0)
+
+	-- Floating icon size slider - live, not a "set and reload/reset to see
+	-- it" control (explicit correction: fine-tuning a hardcoded size back
+	-- and forth wasn't good enough). Same per-container instance-caching
+	-- pattern as the transparency/scale sliders below, for the same reason.
+	local iconSizeRow = NextAppearRow(50)
+	local iconSizeSlider = container.iconSizeSlider
+	if not iconSizeSlider then
+		sliderNameCounter = sliderNameCounter + 1
+		local uniqueName = "XalsCompendiumFloatingIconSizeSlider" .. sliderNameCounter
+		iconSizeSlider = CreateFrame("Slider", uniqueName, iconSizeRow, "OptionsSliderTemplate")
+		_G[uniqueName.."Low"]:SetText("32")
+		_G[uniqueName.."High"]:SetText("128")
+		container.iconSizeSlider = iconSizeSlider
+	else
+		iconSizeSlider:SetParent(iconSizeRow)
+	end
+	iconSizeSlider:ClearAllPoints()
+	iconSizeSlider:SetPoint("TOPLEFT", iconSizeRow, "TOPLEFT", 4, -14)
+	iconSizeSlider:SetWidth(340)
+	iconSizeSlider:SetMinMaxValues(32, 128)
+	iconSizeSlider:SetValueStep(2)
+	iconSizeSlider:SetObeyStepOnDrag(true)
+	local iconSizeStart = (XComp_DB.settings and XComp_DB.settings.floatingIconSize) or 52
+	iconSizeSlider:SetValue(iconSizeStart)
+	_G[iconSizeSlider:GetName().."Text"]:SetText("Floating Icon Size: " .. iconSizeStart)
+	iconSizeSlider:Show()
+	iconSizeSlider:SetScript("OnValueChanged", function(self, value)
+		value = math.floor(value + 0.5)
+		_G[self:GetName().."Text"]:SetText("Floating Icon Size: " .. value)
+		if XComp.SetFloatingIconSize then XComp.SetFloatingIconSize(value) end
+	end)
 
 	-- Background transparency slider. Named explicitly (not nil) because
 	-- OptionsSliderTemplate's Low/High/Text sub-widgets are resolved via
@@ -693,284 +1036,6 @@ function O:PopulateAppearanceRows(container)
 		_G[self:GetName().."Text"]:SetText(string.format("Idle Opacity (not moused over): %d%%", math.floor(value * 100 + 0.5)))
 		if XComp.UI then XComp.UI:ApplyIdleAlpha() end
 	end)
-
-	container:SetHeight(math.max(totalHeight, 1))
-end
-
--------------------------------------------------
--- Page 3: Colors (accent color, background color) - split into its own
--- page once it grew past a single swatch, matching how Routes' Waypoint/
--- Map Markers/Gather Tally pages are each their own topic rather than one
--- long list. Also documents the third color mechanism (per-item/header
--- right-click coloring) that already exists in the main tracker but had no
--- mention anywhere in Options.
--------------------------------------------------
-local function MakeColorSwatchRow(container, anchorTo, label, getColor, setColor, desc)
-	local row = CreateFrame("Frame", nil, container)
-	row:SetHeight(56)
-	row:ClearAllPoints()
-	local rowHeight = 56 + 18
-	if anchorTo then
-		row:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, -18)
-	else
-		row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-	end
-	row:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, row)
-
-	local swatch = CreateFrame("Button", nil, row)
-	swatch:SetSize(26, 26)
-	swatch:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-	local swatchTex = swatch:CreateTexture(nil, "OVERLAY")
-	swatchTex:SetAllPoints()
-	local r, g, b = getColor()
-	swatchTex:SetColorTexture(r, g, b, 1)
-	swatch:SetScript("OnClick", function()
-		local cr, cg, cb = getColor()
-		ColorPickerFrame:SetupColorPickerAndShow({
-			r = cr, g = cg, b = cb,
-			swatchFunc = function()
-				local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-				setColor(nr, ng, nb)
-				swatchTex:SetColorTexture(nr, ng, nb, 1)
-				if XComp.UI then XComp.UI:ApplyTheme() end
-			end,
-			cancelFunc = function()
-				local pr, pg, pb = ColorPickerFrame:GetPreviousValues()
-				if pr then
-					setColor(pr, pg, pb)
-					swatchTex:SetColorTexture(pr, pg, pb, 1)
-					if XComp.UI then XComp.UI:ApplyTheme() end
-				end
-			end,
-		})
-	end)
-
-	local name = row:CreateFontString(nil, "OVERLAY")
-	name:SetFontObject(XComp.TitleFont)
-	name:SetPoint("LEFT", swatch, "RIGHT", 8, 10)
-	local ar, ag, ab = XComp.GetAccentColor()
-	name:SetTextColor(ar, ag, ab, 1)
-	name:SetText(label)
-
-	local descFS = row:CreateFontString(nil, "OVERLAY")
-	descFS:SetFontObject(XComp.BodyFont)
-	descFS:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -6)
-	descFS:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-	descFS:SetJustifyH("LEFT")
-	descFS:SetText(desc)
-
-	return row, rowHeight
-end
-
-function O:PopulateColorsRows(container)
-	if container.rows then
-		for _, row in ipairs(container.rows) do
-			row:Hide()
-			row:SetParent(nil)
-		end
-	end
-	container.rows = {}
-
-	local totalHeight = 0
-
-	local accentRow, accentH = MakeColorSwatchRow(container, nil, "Accent color",
-		function() return XComp.GetAccentColor() end,
-		function(r, g, b) XComp_DB.accentColor = { r, g, b } end,
-		"Borders, titles, and default label color used throughout the addon.")
-	totalHeight = totalHeight + accentH
-
-	local bgRow, bgH = MakeColorSwatchRow(container, accentRow, "Background color",
-		function() return XComp.GetBgColor() end,
-		function(r, g, b) XComp_DB.bgColor = { r, g, b } end,
-		"The panel fill color behind everything (transparency is set separately, on the Appearance page).")
-	totalHeight = totalHeight + bgH
-
-	local noteRow = CreateFrame("Frame", nil, container)
-	noteRow:SetHeight(50)
-	noteRow:SetPoint("TOPLEFT", bgRow, "BOTTOMLEFT", 0, -18)
-	noteRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, noteRow)
-	totalHeight = totalHeight + 50 + 18
-
-	local noteText = noteRow:CreateFontString(nil, "OVERLAY")
-	noteText:SetFontObject(XComp.BodyFont)
-	noteText:SetPoint("TOPLEFT", noteRow, "TOPLEFT", 0, 0)
-	noteText:SetPoint("RIGHT", noteRow, "RIGHT", 0, 0)
-	noteText:SetJustifyH("LEFT")
-	noteText:SetText("Individual quest items and the Daily/Weekly/One-time headers can also be given their own color - right-click any of them directly in the tracker window.")
-
-	-- Text section: font/outline/size/shadow, ported from XalsQuestCompass's
-	-- working ApplyFontSettings/FONT_OPTIONS pattern (Core.lua). Dropdowns
-	-- are instance-cached on the container, same reason as the sliders
-	-- above (UIDropDownMenuTemplate needs a real global name, and
-	-- Populate* runs more than once per container over its lifetime).
-	XComp_DB.text = XComp_DB.text or {}
-
-	local textHeaderRow = CreateFrame("Frame", nil, container)
-	textHeaderRow:SetHeight(20)
-	textHeaderRow:SetPoint("TOPLEFT", noteRow, "BOTTOMLEFT", 0, -18)
-	textHeaderRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, textHeaderRow)
-	totalHeight = totalHeight + 20 + 18
-	local textHeaderText = textHeaderRow:CreateFontString(nil, "OVERLAY")
-	textHeaderText:SetFontObject(XComp.TitleFont)
-	textHeaderText:SetPoint("TOPLEFT", textHeaderRow, "TOPLEFT", 0, 0)
-	textHeaderText:SetText("Text")
-	local thr, thg, thb = XComp.GetAccentColor()
-	textHeaderText:SetTextColor(thr, thg, thb, 1)
-
-	local fontRow = CreateFrame("Frame", nil, container)
-	fontRow:SetHeight(46)
-	fontRow:SetPoint("TOPLEFT", textHeaderRow, "BOTTOMLEFT", 0, -6)
-	fontRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, fontRow)
-	totalHeight = totalHeight + 46 + 6
-
-	local fontLabel = fontRow:CreateFontString(nil, "OVERLAY")
-	fontLabel:SetFontObject(XComp.BodyFont)
-	fontLabel:SetPoint("TOPLEFT", fontRow, "TOPLEFT", 0, 0)
-	fontLabel:SetText("Font")
-
-	local fontDropdown = container.fontDropdown
-	if not fontDropdown then
-		dropdownNameCounter = dropdownNameCounter + 1
-		fontDropdown = CreateFrame("Frame", "XalsCompendiumFontDropdown" .. dropdownNameCounter, fontRow, "UIDropDownMenuTemplate")
-		container.fontDropdown = fontDropdown
-	else
-		fontDropdown:SetParent(fontRow)
-	end
-	fontDropdown:ClearAllPoints()
-	fontDropdown:SetPoint("TOPLEFT", fontLabel, "BOTTOMLEFT", -16, -4)
-	UIDropDownMenu_SetWidth(fontDropdown, 220)
-	local function RefreshFontDropdownText()
-		UIDropDownMenu_SetText(fontDropdown, XComp.GetFontOption(XComp_DB.text.fontKey).name)
-	end
-	UIDropDownMenu_Initialize(fontDropdown, function(self, level)
-		for _, opt in ipairs(XComp.FONT_OPTIONS) do
-			local info = UIDropDownMenu_CreateInfo()
-			info.text = opt.name
-			info.checked = (XComp_DB.text.fontKey == opt.key)
-			info.func = function()
-				XComp_DB.text.fontKey = opt.key
-				RefreshFontDropdownText()
-				XComp.ApplyFontSettings()
-			end
-			UIDropDownMenu_AddButton(info, level)
-		end
-	end)
-	RefreshFontDropdownText()
-	fontDropdown:Show()
-
-	local outlineRow = CreateFrame("Frame", nil, container)
-	outlineRow:SetHeight(46)
-	outlineRow:SetPoint("TOPLEFT", fontRow, "BOTTOMLEFT", 0, -8)
-	outlineRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, outlineRow)
-	totalHeight = totalHeight + 46 + 8
-
-	local outlineLabel = outlineRow:CreateFontString(nil, "OVERLAY")
-	outlineLabel:SetFontObject(XComp.BodyFont)
-	outlineLabel:SetPoint("TOPLEFT", outlineRow, "TOPLEFT", 0, 0)
-	outlineLabel:SetText("Font Outline")
-
-	local outlineDropdown = container.outlineDropdown
-	if not outlineDropdown then
-		dropdownNameCounter = dropdownNameCounter + 1
-		outlineDropdown = CreateFrame("Frame", "XalsCompendiumOutlineDropdown" .. dropdownNameCounter, outlineRow, "UIDropDownMenuTemplate")
-		container.outlineDropdown = outlineDropdown
-	else
-		outlineDropdown:SetParent(outlineRow)
-	end
-	outlineDropdown:ClearAllPoints()
-	outlineDropdown:SetPoint("TOPLEFT", outlineLabel, "BOTTOMLEFT", -16, -4)
-	UIDropDownMenu_SetWidth(outlineDropdown, 220)
-	local function RefreshOutlineDropdownText()
-		UIDropDownMenu_SetText(outlineDropdown, XComp.GetOutlineOption(XComp_DB.text.outlineKey).name)
-	end
-	UIDropDownMenu_Initialize(outlineDropdown, function(self, level)
-		for _, opt in ipairs(XComp.OUTLINE_OPTIONS) do
-			local info = UIDropDownMenu_CreateInfo()
-			info.text = opt.name
-			info.checked = (XComp_DB.text.outlineKey == opt.key)
-			info.func = function()
-				XComp_DB.text.outlineKey = opt.key
-				RefreshOutlineDropdownText()
-				XComp.ApplyFontSettings()
-			end
-			UIDropDownMenu_AddButton(info, level)
-		end
-	end)
-	RefreshOutlineDropdownText()
-	outlineDropdown:Show()
-
-	local sizeRow2 = CreateFrame("Frame", nil, container)
-	sizeRow2:SetHeight(50)
-	sizeRow2:SetPoint("TOPLEFT", outlineRow, "BOTTOMLEFT", 0, -8)
-	sizeRow2:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, sizeRow2)
-	totalHeight = totalHeight + 50 + 8
-
-	local fontSizeSlider = container.fontSizeSlider
-	if not fontSizeSlider then
-		sliderNameCounter = sliderNameCounter + 1
-		local uniqueName = "XalsCompendiumFontSizeSlider" .. sliderNameCounter
-		fontSizeSlider = CreateFrame("Slider", uniqueName, sizeRow2, "OptionsSliderTemplate")
-		_G[uniqueName.."Low"]:SetText("10")
-		_G[uniqueName.."High"]:SetText("22")
-		container.fontSizeSlider = fontSizeSlider
-	else
-		fontSizeSlider:SetParent(sizeRow2)
-	end
-	fontSizeSlider:ClearAllPoints()
-	fontSizeSlider:SetPoint("TOPLEFT", sizeRow2, "TOPLEFT", 4, -14)
-	fontSizeSlider:SetWidth(340)
-	fontSizeSlider:SetMinMaxValues(10, 22)
-	fontSizeSlider:SetValueStep(1)
-	fontSizeSlider:SetObeyStepOnDrag(true)
-	local fontSizeStart = XComp_DB.text.fontSize or 13
-	fontSizeSlider:SetValue(fontSizeStart)
-	_G[fontSizeSlider:GetName().."Text"]:SetText("Font Size: " .. fontSizeStart)
-	fontSizeSlider:Show()
-	fontSizeSlider:SetScript("OnValueChanged", function(self, value)
-		value = math.floor(value + 0.5)
-		XComp_DB.text.fontSize = value
-		_G[self:GetName().."Text"]:SetText("Font Size: " .. value)
-		XComp.ApplyFontSettings()
-	end)
-
-	local shadowRow = CreateFrame("Frame", nil, container)
-	shadowRow:SetHeight(26)
-	shadowRow:SetPoint("TOPLEFT", sizeRow2, "BOTTOMLEFT", 0, -4)
-	shadowRow:SetPoint("RIGHT", container, "RIGHT", 0, 0)
-	table.insert(container.rows, shadowRow)
-	totalHeight = totalHeight + 26 + 4
-
-	local shadowCB = MakeCheckbox(shadowRow, 22)
-	shadowCB:SetPoint("TOPLEFT", shadowRow, "TOPLEFT", 0, 0)
-	local shadowEnabled = XComp_DB.text.shadowEnabled
-	if shadowEnabled == nil then shadowEnabled = true end
-	shadowCB:SetChecked(shadowEnabled)
-	shadowCB.OnToggle = function(btn)
-		XComp_DB.text.shadowEnabled = btn:GetChecked() and true or false
-		XComp.ApplyFontSettings()
-	end
-	local shadowLabel = shadowRow:CreateFontString(nil, "OVERLAY")
-	shadowLabel:SetFontObject(XComp.BodyFont)
-	shadowLabel:SetPoint("LEFT", shadowCB, "RIGHT", 6, 8)
-	shadowLabel:SetText("Text shadow")
-
-	local shadowColorRow, shadowColorH = MakeColorSwatchRow(container, shadowRow, "Shadow color",
-		function()
-			local c = XComp_DB.text.shadowColor or { 0, 0, 0 }
-			return c[1], c[2], c[3]
-		end,
-		function(r, g, b)
-			XComp_DB.text.shadowColor = { r, g, b }
-			XComp.ApplyFontSettings()
-		end,
-		"Only visible when Text shadow (above) is turned on.")
-	totalHeight = totalHeight + shadowColorH
 
 	container:SetHeight(math.max(totalHeight, 1))
 end
@@ -1378,7 +1443,6 @@ StaticPopupDialogs["XCOMP_RESTORE_BACKUP"] = {
 		for _, c in ipairs(backupContainers) do XComp.Options:PopulateBackupRows(c) end
 		for _, c in ipairs(generalContainers) do XComp.Options:PopulateGeneralRows(c) end
 		for _, c in ipairs(appearanceContainers) do XComp.Options:PopulateAppearanceRows(c) end
-		for _, c in ipairs(colorsContainers) do XComp.Options:PopulateColorsRows(c) end
 	end,
 	timeout = 0,
 	whileDead = true,
@@ -1435,6 +1499,13 @@ function O:PopulateBackupRows(container)
 	end)
 	backupBtn:ClearAllPoints()
 	backupBtn:SetPoint("TOPLEFT", btnRow, "TOPLEFT", 0, 0)
+
+	-- "Reset to Defaults" - moved here from the shared page header (2026-09-
+	-- 29): a real, semi-destructive settings action belongs with the other
+	-- backup/restore controls, not floating on every single page.
+	local resetBtn = MakeFlatButton(btnRow, backupBtn, 150, "Reset to Defaults", function()
+		self:ResetToDefaults()
+	end)
 
 	local anchorTo = btnRow
 	local totalHeight = 54 + 10 + 30
@@ -1573,7 +1644,7 @@ function O:BuildReputationPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
 	panel.rowsContainer = rowsContainer
@@ -1701,6 +1772,10 @@ function O:RefreshAltsPanel(panel)
 			else
 				btn:SetPoint("TOPLEFT", panel.charSidebar, "TOPLEFT", 0, 0)
 			end
+			local sar, sag, sab = XComp.GetAccentColor()
+			btn:SetSelectedColor(sar, sag, sab)
+			btn:SetUnselectedColor(XComp.SIDEBAR_UNSELECTED[1], XComp.SIDEBAR_UNSELECTED[2], XComp.SIDEBAR_UNSELECTED[3])
+			btn:SetFontSize(14)
 			btn:SetSelected(entry.charKey == panel.selectedCharKey)
 			table.insert(panel.charButtons, btn)
 			anchorBtn = btn
@@ -1721,6 +1796,10 @@ function O:RefreshAltsPanel(panel)
 			else
 				btn:SetPoint("TOPLEFT", panel.sectionSidebar, "TOPLEFT", 0, 0)
 			end
+			local sar2, sag2, sab2 = XComp.GetAccentColor()
+			btn:SetSelectedColor(sar2, sag2, sab2)
+			btn:SetUnselectedColor(XComp.SIDEBAR_UNSELECTED[1], XComp.SIDEBAR_UNSELECTED[2], XComp.SIDEBAR_UNSELECTED[3])
+			btn:SetFontSize(14)
 			table.insert(panel.sectionButtons, btn)
 			anchorSec = btn
 		end
@@ -1746,17 +1825,16 @@ function O:BuildAltsPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local charSidebar = CreateFrame("Frame", nil, panel)
 	charSidebar:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -14)
 	charSidebar:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 16)
 	charSidebar:SetWidth(140)
 
-	local ar, ag, ab = XComp.GetAccentColor()
 	local vDivider1 = panel:CreateTexture(nil, "ARTWORK")
 	vDivider1:SetWidth(2)
-	vDivider1:SetColorTexture(ar, ag, ab, 1)
+	vDivider1:SetColorTexture(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	vDivider1:SetPoint("TOPLEFT", charSidebar, "TOPRIGHT", 10, 0)
 	vDivider1:SetPoint("BOTTOMLEFT", charSidebar, "BOTTOMRIGHT", 10, 0)
 
@@ -1767,7 +1845,7 @@ function O:BuildAltsPanel()
 
 	local vDivider2 = panel:CreateTexture(nil, "ARTWORK")
 	vDivider2:SetWidth(2)
-	vDivider2:SetColorTexture(ar, ag, ab, 1)
+	vDivider2:SetColorTexture(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	vDivider2:SetPoint("TOPLEFT", sectionSidebar, "TOPRIGHT", 10, 0)
 	vDivider2:SetPoint("BOTTOMLEFT", sectionSidebar, "BOTTOMRIGHT", 10, 0)
 
@@ -1804,7 +1882,7 @@ function O:BuildBackupPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
 	panel.rowsContainer = rowsContainer
@@ -1828,7 +1906,7 @@ function O:BuildPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
 	panel.rowsContainer = rowsContainer
@@ -1852,7 +1930,7 @@ function O:BuildAppearancePanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
 	panel.rowsContainer = rowsContainer
@@ -1863,28 +1941,6 @@ function O:BuildAppearancePanel()
 	return panel
 end
 
--- Third native subcategory page - accent + background color swatches.
-function O:BuildColorsPanel()
-	if self.colorsPanel then return self.colorsPanel end
-
-	local panel = CreateFrame("Frame")
-	panel.name = "Colors"
-
-	local bg = panel:CreateTexture(nil, "BACKGROUND")
-	bg:SetAllPoints()
-	bg:SetColorTexture(GetPanelBg())
-
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
-
-	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
-	panel.rowsContainer = rowsContainer
-
-	self.colorsPanel = panel
-	self:PopulateColorsRows(rowsContainer)
-	table.insert(colorsContainers, rowsContainer)
-	return panel
-end
-
 -- Builds a real sub-tab bar (Currencies / Goals) inside whatever parent is
 -- given, anchored below topAnchor - used by BOTH the native Currencies
 -- subcategory page and the standalone window's Currencies tab, so they
@@ -1892,8 +1948,8 @@ end
 -- tab/page system shows or hides as a unit) plus both inner containers.
 local function BuildCurrenciesSubTabs(O, parent, topAnchor, bottomOffset)
 	-- Direct children of `parent`, same as every other tab's content
-	-- (General/Appearance/Colors/Diagnostics all anchor straight to the
-	-- panel) - no extra wrapper frame layer.
+	-- (General/Appearance/Diagnostics all anchor straight to the panel) - no
+	-- extra wrapper frame layer.
 	local subTabBar = CreateFrame("Frame", nil, parent)
 	subTabBar:SetPoint("TOPLEFT", topAnchor, "BOTTOMLEFT", 0, -6)
 	subTabBar:SetPoint("TOPRIGHT", topAnchor, "BOTTOMRIGHT", 0, -6)
@@ -1973,7 +2029,7 @@ function O:BuildCurrenciesPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	-- BuildCurrenciesSubTabs already populates the default (Currencies)
 	-- sub-tab internally - no separate Populate calls needed here.
@@ -1995,7 +2051,7 @@ function O:BuildDiagnosticsPanel()
 	bg:SetAllPoints()
 	bg:SetColorTexture(GetPanelBg())
 
-	local divider = BuildHeader(panel, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(panel)
 
 	local rowsContainer = MakeScrollingRowsContainer(panel, divider)
 	panel.rowsContainer = rowsContainer
@@ -2044,8 +2100,7 @@ function O:BuildStandaloneWindow()
 		edgeSize = 1,
 	})
 	f:SetBackdropColor(GetPanelBg())
-	local sar, sag, sab = XComp.GetAccentColor()
-	f:SetBackdropBorderColor(sar, sag, sab, 1)
+	f:SetBackdropBorderColor(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 
 	f:SetMovable(true)
 	f:EnableMouse(true)
@@ -2081,7 +2136,7 @@ function O:BuildStandaloneWindow()
 	closeBtn:ClearAllPoints()
 	closeBtn:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -24, 8)
 
-	local divider = BuildHeader(f, function() self:ResetToDefaults() end)
+	local divider = BuildHeader(f)
 
 	-- Tabs run down the LEFT side with a vertical divider between them and
 	-- the page content, matching the Esc-menu's own settings layout -
@@ -2092,10 +2147,14 @@ function O:BuildStandaloneWindow()
 	sidebar:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 34)
 	sidebar:SetWidth(100)
 
+	-- Standing Discord link - bottom of the sidebar, visible on every page
+	-- (not just one tab), same placement Quest Compass already uses.
+	local discordLogo = MakeDiscordLogoLink(sidebar, 84)
+	discordLogo:SetPoint("BOTTOMLEFT", sidebar, "BOTTOMLEFT", 0, 0)
+
 	local vDivider = f:CreateTexture(nil, "ARTWORK")
 	vDivider:SetWidth(2)
-	local var, vag, vab = XComp.GetAccentColor()
-	vDivider:SetColorTexture(var, vag, vab, 1)
+	vDivider:SetColorTexture(XComp.DIVIDER_COLOR[1], XComp.DIVIDER_COLOR[2], XComp.DIVIDER_COLOR[3], 1)
 	vDivider:SetPoint("TOPLEFT", sidebar, "TOPRIGHT", 10, 0)
 	vDivider:SetPoint("BOTTOMLEFT", sidebar, "BOTTOMRIGHT", 10, 0)
 
@@ -2112,20 +2171,17 @@ function O:BuildStandaloneWindow()
 
 	local generalContainer = MakeScrollingRowsContainer(f, contentTop, 32)
 	local appearanceContainer = MakeScrollingRowsContainer(f, contentTop, 32)
-	local colorsContainer = MakeScrollingRowsContainer(f, contentTop, 32)
 	local currenciesWrapper, currencyContainer = BuildCurrenciesSubTabs(self, f, contentTop, 32)
 	local diagnosticsContainer = MakeScrollingRowsContainer(f, contentTop, 32)
 	local backupContainer = MakeScrollingRowsContainer(f, contentTop, 32)
 	f.generalContainer = generalContainer
 	f.appearanceContainer = appearanceContainer
-	f.colorsContainer = colorsContainer
 	f.currenciesWrapper = currenciesWrapper
 	f.currencyContainer = currencyContainer
 	f.diagnosticsContainer = diagnosticsContainer
 	f.backupContainer = backupContainer
 	table.insert(generalContainers, generalContainer)
 	table.insert(appearanceContainers, appearanceContainer)
-	table.insert(colorsContainers, colorsContainer)
 	table.insert(backupContainers, backupContainer)
 
 	-- This window sits at DIALOG strata (so it renders above other UI - see
@@ -2137,7 +2193,7 @@ function O:BuildStandaloneWindow()
 	-- The native settings panel never hits this because it isn't forced to
 	-- a custom strata at all - real, confirmed difference (floating window
 	-- broken, native panel fine, identical scroll code otherwise).
-	for _, c in ipairs({ generalContainer, appearanceContainer, colorsContainer, currencyContainer, diagnosticsContainer, backupContainer }) do
+	for _, c in ipairs({ generalContainer, appearanceContainer, currencyContainer, diagnosticsContainer, backupContainer }) do
 		c:GetParent():GetParent():SetFrameStrata("DIALOG")
 	end
 
@@ -2150,12 +2206,11 @@ function O:BuildStandaloneWindow()
 	local panels = {
 		generalContainer:GetParent():GetParent(),
 		appearanceContainer:GetParent():GetParent(),
-		colorsContainer:GetParent():GetParent(),
 		currenciesWrapper,
 		diagnosticsContainer:GetParent():GetParent(),
 		backupContainer:GetParent():GetParent(),
 	}
-	local labels = { "General", "Appearance", "Colors", "Currencies", "Diagnostics", "Backup" }
+	local labels = { "General", "Appearance", "Currencies", "Diagnostics", "Backup" }
 	local tabs = {}
 
 	local function ShowTab(activeIndex)
@@ -2174,6 +2229,13 @@ function O:BuildStandaloneWindow()
 		else
 			tab:SetPoint("TOPLEFT", sidebar, "TOPLEFT", 0, 0)
 		end
+		-- Sidebar links specifically use the accent color when selected (not
+		-- white) and the muted blue-gray when not - narrowly scoped to this
+		-- sidebar, per the family standard.
+		local sar, sag, sab = XComp.GetAccentColor()
+		tab:SetSelectedColor(sar, sag, sab)
+		tab:SetUnselectedColor(XComp.SIDEBAR_UNSELECTED[1], XComp.SIDEBAR_UNSELECTED[2], XComp.SIDEBAR_UNSELECTED[3])
+		tab:SetFontSize(14)
 		tabs[i] = tab
 		anchorTab = tab
 	end
@@ -2185,7 +2247,6 @@ function O:BuildStandaloneWindow()
 	self.standaloneFrame = f
 	self:PopulateGeneralRows(generalContainer)
 	self:PopulateAppearanceRows(appearanceContainer)
-	self:PopulateColorsRows(colorsContainer)
 	-- Currencies already populated its default sub-tab internally, inside
 	-- BuildCurrenciesSubTabs - no separate call needed here.
 	self:PopulateDiagnosticsRows(diagnosticsContainer)
@@ -2203,7 +2264,6 @@ function O:ToggleStandalone()
 		-- on the General tab for a consistent starting point.
 		self:PopulateGeneralRows(f.generalContainer)
 		self:PopulateAppearanceRows(f.appearanceContainer)
-		self:PopulateColorsRows(f.colorsContainer)
 		f.currenciesWrapper:RefreshActive()
 		self:PopulateDiagnosticsRows(f.diagnosticsContainer)
 		self:PopulateBackupRows(f.backupContainer)
@@ -2227,9 +2287,6 @@ function O:Register()
 
 	local appearancePanel = self:BuildAppearancePanel()
 	Settings.RegisterCanvasLayoutSubcategory(category, appearancePanel, appearancePanel.name)
-
-	local colorsPanel = self:BuildColorsPanel()
-	Settings.RegisterCanvasLayoutSubcategory(category, colorsPanel, colorsPanel.name)
 
 	local currenciesPanel = self:BuildCurrenciesPanel()
 	Settings.RegisterCanvasLayoutSubcategory(category, currenciesPanel, currenciesPanel.name)
