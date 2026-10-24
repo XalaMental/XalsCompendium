@@ -1,5 +1,34 @@
 # Xal's Compendium - Changelog
 
+## 2.2.0 - October 24, 2026
+
+---
+
+I kept running into the same problem: the tracker would tell me everything I had left across the whole game, when all I really wanted to know was what's left in the zone I'm standing in. So Compendium now follows you around. There's a floating icon that lights up whenever anything is still open and shows a number for your current zone, and a new Zone tab that puts your dailies and weeklies for that zone together in one place. While I was in there, I gave the whole addon the new Xal's look, rebuilt how Legacy content gets picked, and kept tracking down more real quests one at a time. Thanks for being part of the Xal family.
+
+### 🆕 New
+- **Floating icon** - shows whenever any daily or weekly is still open anywhere, with a number for what's left in the zone you're in right now (dungeon entrances and other areas inside the zone count too). Drag it where you like; turn it off, resize it, or reset its position in Appearance settings.
+- **Zone tab** - the new first tab, showing your dailies and weeklies together for your current zone.
+- **Legacy is now opt-in** - a checkbox plus a "Select Expansions" dropdown in settings. Nothing from Legacy counts or shows until you pick it.
+- **Hallow's End dailies** - a new Holiday Events section that only appears while the event is actually running.
+- **More real quests, each checked against Wowhead:** the Mining, Skinning and Herbalism weeklies, the Timewalking weeklies, Midnight: Delves, Midnight: Dungeons, Midnight: World Quests, The Arena Calls, Research Console: Exploring the Void, Going for the Crown, Tailing the Tlhapi, a second Special Assignment: Titanic Resurgence, the Heroic Val invasion quest, and a batch of standalone weeklies and dailies.
+- **Quests I reviewed and decided not to track** (wrong expansion or not a real quest) are now remembered for good, so they stop coming back up.
+
+### 🔧 Changed
+- **New look everywhere** - dark red accents, new fonts, plain text-link buttons, and a cleaner sidebar across the tracker, settings, and the What's New screen.
+- The Discord logo now sits at the bottom of the settings sidebar.
+- Reset to Defaults moved to the Backup page.
+- Zone sections now have their own colors for the newer zones.
+- The minimize bar is gone.
+
+### 🐛 Fixed
+- Closing the tracker now keeps it closed, instead of popping back open.
+- Zone and tab counts now match exactly what's listed.
+- Two settings rows no longer draw on top of each other.
+- The weekly dungeon-of-the-week quest now tracks all of its real dungeons (one is still outstanding).
+
+---
+
 ## 2.1.0 - August 17, 2026
 
 ---
