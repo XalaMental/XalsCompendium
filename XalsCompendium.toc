@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100, 120105, 120107, 120007
 ## Title: Xal's Compendium
 ## Notes: Daily & weekly quest and activity tracker.
 ## Author: Xal
@@ -28,3 +28,4 @@ Data.lua
 GeneratedCatalog.lua
 UI.lua
 Options.lua
+FloatingIcon.lua
