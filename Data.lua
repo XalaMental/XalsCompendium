@@ -41,6 +41,7 @@ local CONTENT_CATEGORIES = {
 	{ key = "storyCampaign", label = "Story/Campaign" },
 	{ key = "worldQuests", label = "World Quests" },
 	{ key = "custom", label = "Custom" },
+	{ key = "holidayEvents", label = "Holiday Events" },
 }
 
 local function BuildCategories()
@@ -104,7 +105,11 @@ do
 		-- Tagged by pickup location (Silvermoon City), not by which dungeon
 		-- is live that week - confirmed 2026-08-15, same reasoning as The
 		-- World Awaits.
-		{ uid = "weekly-dungeon-rotation", name = "Weekly Dungeon Quest (rotates)", questIDs = { 93751, 93752, 93753, 93754, 93758 }, zone = "Silvermoon City", children = {} },
+		-- Den of Nalorakk (93755, 2026-08-17) and The Blinding Vale (93756,
+		-- 2026-09-15) added as they got live-detected - the pool was
+		-- missing 3 of the real 8 dungeon board entries. Voidscar Arena is
+		-- still NOT added - no live detection confirming it yet.
+		{ uid = "weekly-dungeon-rotation", name = "Weekly Dungeon Quest (rotates)", questIDs = { 93751, 93752, 93753, 93754, 93755, 93756, 93758 }, zone = "Silvermoon City", children = {} },
 		{ uid = "quest-98220", name = "Altar of Fangs", questID = 98220, zone = "Vaults of Atal'Utek", children = {} },
 		-- Showdown on Val / Naigtal - ANOTHER rotating pool (confirmed by
 		-- the user 2026-08-14: "if Val is active one week Naigtal will be
@@ -154,6 +159,8 @@ do
 		{ uid = "quest-96644", name = "Essence of Malice", questID = 96644, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
 		-- Confirmed by Jason 2026-08-17 - both Naigtal.
 		{ uid = "quest-97086", name = "Dangerous Enemies: Naigtal (Heroic)", questID = 97086, zone = "Naigtal", isRotating = true, children = {} },
+		-- Val-side counterpart, added 2026-09-15 once live-detected.
+		{ uid = "quest-97083", name = "Dangerous Enemies: Val (Heroic)", questID = 97083, zone = "Val", isRotating = true, children = {} },
 		{ uid = "quest-96942", name = "Oh Captain, Die Captain!", questID = 96942, zone = "Naigtal", children = {} },
 		-- Batch from real Wowhead research (2026-08-17), all verified before
 		-- adding - see compendium_changelog_dev.md for the full research
@@ -179,13 +186,28 @@ do
 		{ uid = "quest-95468", name = "Hope in the Darkest Corners", questID = 95468, children = {} },
 		{ uid = "quest-89507", name = "Abundant Offerings", questID = 89507, children = {} },
 		{ uid = "quest-93608", name = "A Burning Path Through Time", questID = 93608, children = {} },
+		{ uid = "quest-93628", name = "A Shadowed Path Through Time", questID = 93628, children = {} },
+		{ uid = "quest-93612", name = "A Shrouded Path Through Time", questID = 93612, children = {} },
 		{ uid = "quest-93784", name = "A Gnawing Void of Curiosity", questID = 93784, zone = "Silvermoon City", children = {} },
 		-- The "Prey" hunt system - player picks the zone, so no fixed zone
 		-- tag. A Nightmarish Task is the weekly capstone tying the two
 		-- Nightmare-tier hunts together.
 		{ uid = "quest-95021", name = "Prey: Janoa the Fang (Nightmare)", questID = 95021, children = {} },
 		{ uid = "quest-95024", name = "Prey: Kadani the Claw (Nightmare)", questID = 95024, children = {} },
+		{ uid = "quest-95023", name = "Prey: Batani the Scaled (Nightmare)", questID = 95023, children = {} },
 		{ uid = "quest-94446", name = "A Nightmarish Task", questID = 94446, children = {} },
+		-- Real Wowhead research batch, 2026-08-17.
+		{ uid = "quest-96639", name = "Patrolling the Temple", questID = 96639, zone = "Vaults of Atal'Utek", isRotating = true, children = {} },
+		{ uid = "quest-94390", name = "Special Assignment: A Hunter's Regret", questID = 94390, zone = "Harandar", isRotating = true, children = {} },
+		-- No fixed zone confirmed (reward mentions Quel'Thalas/Midnight
+		-- Delves, but no explicit zone found) - same treatment as The World
+		-- Awaits/A Call to Battle.
+		{ uid = "quest-93595", name = "A Call to Delves", questID = 93595, children = {} },
+		-- Batch from real Wowhead research, 2026-09-15.
+		{ uid = "quest-98172", name = "Trailing Xal'atath", questID = 98172, zone = "Silvermoon City", isRotating = true, children = {} },
+		-- No fixed zone confirmed - same treatment as A Call to Battle/A
+		-- Call to Delves.
+		{ uid = "quest-93598", name = "Emissary of War", questID = 93598, children = {} },
 	}
 	for _, item in ipairs(seedItems) do
 		table.insert(weeklyEvents.items, item)
@@ -214,6 +236,28 @@ do
 		{ uid = "quest-92848", name = "Special Assignment: The Grand Magister's Drink", questID = 92848, zone = "Eversong Woods", isRotating = true, children = {} },
 		{ uid = "quest-89354", name = "Preparing for Battle", questID = 89354, zone = "Voidstorm", isRotating = true, children = {} },
 		{ uid = "quest-94743", name = "Special Assignment: Precision Excision", questID = 94743, zone = "Voidstorm", isRotating = true, children = {} },
+		-- Confirmed via Wowhead 2026-09-29: a real meta-quest tracking world
+		-- quest completion, questgiver Lady Liadrin, picked up in Silvermoon
+		-- City - same "tag by pickup location" rule as The World Awaits
+		-- above. Detected as "recurring" (ResetByScheduler), so isRotating.
+		{ uid = "quest-93766", name = "Midnight: World Quests", questID = 93766, zone = "Silvermoon City", isRotating = true, children = {} },
+		-- Confirmed via Wowhead 2026-09-29: real weekly, questgiver Archmage
+		-- Aethas Sunreaver in Silvermoon City, "Win 10 Arena Skirmish
+		-- battles" - part of a known recurring Arena-weekly family (older
+		-- level-40/80 variants also exist on Wowhead). Detected as plain
+		-- "weekly", not "recurring" - same standard-fixed-weekly treatment
+		-- as A Call to Battle above, not isRotating.
+		{ uid = "quest-93600", name = "The Arena Calls", questID = 93600, zone = "Silvermoon City", children = {} },
+		-- Confirmed via Wowhead 2026-10-24 and approved by Jason. None are
+		-- isRotating: these are standing quests, not C_TaskQuest world quests,
+		-- so the rotation filter would hide them permanently.
+		{ uid = "quest-94790", name = "Research Console: Exploring the Void", questID = 94790, zone = "Voidstorm", children = {} },
+		{ uid = "quest-93909", name = "Midnight: Delves", questID = 93909, children = {} },
+		{ uid = "quest-93911", name = "Midnight: Dungeons", questID = 93911, children = {} },
+		-- Voidlight Marl / Captain Tokka quests; zone unconfirmed on Wowhead
+		-- (Serpent's Tail named for 94803 only), left untagged.
+		{ uid = "quest-94803", name = "Going for the Crown", questID = 94803, children = {} },
+		{ uid = "quest-97557", name = "Tailing the Tlhapi", questID = 97557, children = {} },
 	}
 	-- daily-cadence "Prey" content and worldQuestItems both feed the same
 	-- Weekly-type World Quests category above; this one's a real Daily,
@@ -226,6 +270,10 @@ do
 	local professions = weeklyType.categories[4]
 	table.insert(professions.items, { uid = "quest-93691", name = "Blacksmithing Services Requested", questID = 93691, children = {} })
 	table.insert(professions.items, { uid = "quest-93695", name = "Leatherworking Services Requested", questID = 93695, zone = "Silvermoon City", children = {} })
+	-- Gathering profession weeklies, confirmed via Wowhead 2026-10-24.
+	table.insert(professions.items, { uid = "quest-93705", name = "Copper for Your Thoughts?", questID = 93705, zone = "Silvermoon City", children = {} })
+	table.insert(professions.items, { uid = "quest-93712", name = "Style and Skill", questID = 93712, zone = "Silvermoon City", children = {} })
+	table.insert(professions.items, { uid = "quest-93701", name = "Brittle and Brilliant", questID = 93701, zone = "Silvermoon City", children = {} })
 
 	-- Daily-frequency housing/neighborhood content - bucketed under Custom
 	-- (not "Weekly Events", which would read wrong under the Daily type).
@@ -243,6 +291,29 @@ do
 
 	local dailyWorldQuests = dailyType.categories[7]
 	table.insert(dailyWorldQuests.items, { uid = "quest-96528", name = "Prey: Anguish from Beyond", questID = 96528, zone = "The Coiled Isle", children = {} })
+	-- No fixed zone confirmed for either (checkpoint-ring racing minigame
+	-- quests, Bronze Timepiece reward) - 2026-09-15.
+	table.insert(dailyWorldQuests.items, { uid = "quest-95410", name = "Cragthorn Certified", questID = 95410, children = {} })
+	table.insert(dailyWorldQuests.items, { uid = "quest-95411", name = "Desert Dispatch", questID = 95411, children = {} })
+
+	-- Hallow's End dailies, confirmed via Wowhead 2026-10-24. `holiday` makes
+	-- D:IsItemActive follow the in-game calendar, and isRotating routes them
+	-- through the same hide-unless-live path as world quests, so they only
+	-- appear (and only count toward the floating icon) while the event runs.
+	local dailyHoliday = dailyType.categories[9]
+	local hallowsEnd = {
+		{ uid = "quest-93400", name = "Sugar Run", questID = 93400 },
+		{ uid = "quest-29144", name = "Clean Up in Stormwind", questID = 29144, zone = "Stormwind City" },
+		{ uid = "quest-29054", name = "Stink Bombs Away!", questID = 29054, zone = "Undercity" },
+		{ uid = "quest-92104", name = "Broomstick Express", questID = 92104 },
+		{ uid = "quest-29371", name = "A Time to Lose", questID = 29371 },
+	}
+	for _, item in ipairs(hallowsEnd) do
+		item.holiday = "Hallow's End"
+		item.isRotating = true
+		item.children = {}
+		table.insert(dailyHoliday.items, item)
+	end
 
 	-- Legacy tier - old-expansion content, confirmed via Wowhead as
 	-- Battle for Azeroth (Azerite), The War Within (Lynx Rescue, Titanic
@@ -255,6 +326,11 @@ do
 		{ uid = "quest-53436", name = "Azerite for the Alliance", questID = 53436, zone = "Legacy", isRotating = true, children = {} },
 		{ uid = "quest-82158", name = "Special Assignment: Lynx Rescue", questID = 82158, zone = "Legacy", isRotating = true, children = {} },
 		{ uid = "quest-82154", name = "Special Assignment: Titanic Resurgence", questID = 82154, zone = "Legacy", isRotating = true, children = {} },
+		-- Separate quest ID sharing the same name, confirmed via Wowhead as
+		-- its own distinct objective ("Complete 3 World Quests in Isle of
+		-- Dorn") rather than a duplicate of 82154 - added as its own item,
+		-- 2026-09-15.
+		{ uid = "quest-83069", name = "Special Assignment: Titanic Resurgence", questID = 83069, zone = "Legacy", isRotating = true, children = {} },
 		{ uid = "quest-82155", name = "Special Assignment: Shadows Below", questID = 82155, zone = "Legacy", isRotating = true, children = {} },
 		-- Real Wowhead research batch, 2026-08-17.
 		{ uid = "quest-82156", name = "Special Assignment: When the Deeps Stir", questID = 82156, zone = "Legacy", isRotating = true, children = {} },
@@ -266,6 +342,11 @@ do
 		-- rotating-pool treatment as the dungeon board. K'aresh/Ghosts of
 		-- K'aresh (patch 11.2.0) - older than Midnight, so Legacy.
 		{ uid = "making-a-deposit-rotation", name = "Making a Deposit (rotates)", questIDs = { 89061, 89062, 89063 }, zone = "Legacy", children = {} },
+		-- Isle of Dorn - a War Within zone, older than Midnight.
+		{ uid = "quest-82146", name = "Special Assignment: Cinderbee Surge", questID = 82146, zone = "Legacy", isRotating = true, children = {} },
+		-- Very old quest ID (40173) - a Dalaran Timewalking-event quest, not
+		-- tied to any current Midnight zone.
+		{ uid = "quest-40173", name = "The Unstable Prism", questID = 40173, zone = "Legacy", children = {} },
 	}
 	for _, item in ipairs(legacyItems) do
 		table.insert(legacyWorldQuests.items, item)
@@ -492,7 +573,30 @@ end
 -- quest to begin with (regular NPC-given quests like housing weeklies),
 -- so a false result does NOT necessarily mean "not available" for those -
 -- only meaningful as a positive "this is up right now" signal.
+local holidayCache = {}
+function D:IsHolidayActive(title)
+	local now = time()
+	local cached = holidayCache[title]
+	if cached and now - cached.at < 60 then return cached.active end
+	local active = false
+	local today = C_DateAndTime.GetCurrentCalendarTime()
+	for i = 1, C_Calendar.GetNumDayEvents(0, today.monthDay) do
+		local ev = C_Calendar.GetDayEvent(0, today.monthDay, i)
+		if ev and ev.calendarType == "HOLIDAY" and ev.title and ev.title:find(title, 1, true) then
+			active = true
+			break
+		end
+	end
+	holidayCache[title] = { at = now, active = active }
+	return active
+end
+
+function D:ClearHolidayCache()
+	wipe(holidayCache)
+end
+
 function D:IsItemActive(item)
+	if item.holiday then return self:IsHolidayActive(item.holiday) end
 	if item.questIDs then
 		for _, qid in ipairs(item.questIDs) do
 			if C_TaskQuest.IsActive(qid) then return true end
@@ -501,6 +605,35 @@ function D:IsItemActive(item)
 	end
 	if not item.questID then return false end
 	return C_TaskQuest.IsActive(item.questID)
+end
+
+-- Whether an item should be treated as "not really outstanding right now"
+-- for counting/display purposes - a rotating item (isRotating flag, or a
+-- questIDs pool) that's neither complete nor currently active. Same
+-- exclusion rule UI.lua's RenderGroup already applies before it ever draws
+-- a row, pulled out here so counting functions (the floating icon's badge)
+-- can apply the exact same rule instead of counting things the visible
+-- list would never actually show - real bug, confirmed via screenshot
+-- (icon read 5, only 2 items were ever visible) on the Zone tab's own
+-- subtitle first, same root cause here.
+function D:IsHiddenRotationItem(item, resetEpoch)
+	if not (item.isRotating or item.questIDs) then return false end
+	local isComplete = self:GetItemStatus(item, resetEpoch)
+	return not isComplete and not self:IsItemActive(item)
+end
+
+-- CountItems, but first drops anything IsHiddenRotationItem would exclude -
+-- for any counting path that needs to match what the visible list actually
+-- shows (the floating icon's badge, the Zone tab's subtitle) rather than a
+-- raw catalog count.
+function D:CountVisibleItems(items, resetEpoch)
+	local visible = {}
+	for _, item in ipairs(items) do
+		if not self:IsHiddenRotationItem(item, resetEpoch) then
+			table.insert(visible, item)
+		end
+	end
+	return self:CountItems(visible, resetEpoch)
 end
 
 function D:CountType(typeSection)
@@ -530,27 +663,182 @@ function D:CountTier(tier)
 	return completed, total
 end
 
--- Daily/Weekly items still left across BOTH tiers (Current + Legacy),
--- matching type key "daily"/"weekly" regardless of which tier they're under
--- - same "type is shared across tiers" rule CountTier already applies. Used
--- by the minimized tracker bar's "D/W" counts.
+-- The player's current real ZONE (for display, e.g. the Zone tab's
+-- subtitle) - C_Map.GetBestMapForUnit("player") returns whatever map is
+-- most specific to where you're actually standing, which is frequently a
+-- sub-area rather than the zone itself, so this climbs UP the map
+-- hierarchy via parentMapID until landing on a real Enum.UIMapType.Zone-
+-- type map - that's what "The Coiled Isle"/"Voidstorm"/etc. actually are.
+function D:GetCurrentZoneName()
+	local mapID = C_Map.GetBestMapForUnit("player")
+	while mapID do
+		local mapInfo = C_Map.GetMapInfo(mapID)
+		if not mapInfo then return nil end
+		if mapInfo.mapType == Enum.UIMapType.Zone then
+			return mapInfo.name
+		end
+		mapID = mapInfo.parentMapID
+	end
+	return nil
+end
+
+-- Every zone/sub-area name that counts as "being in" your current zone, for
+-- MATCHING catalog .zone tags against - not just the single zone name above.
+-- Confirmed real bug (screenshot, 2026-09-29): "Vaults of Atal'Utek" is
+-- physically located inside "The Coiled Isle" (a dungeon entrance sitting
+-- in that outdoor zone, per Jason directly - "vaults are in this zone"),
+-- but the catalog tags its quests with the more specific sub-area name, not
+-- the umbrella zone. A plain exact-name match against GetCurrentZoneName()
+-- alone would never include those items while standing in the outdoor
+-- zone proper. Fixed by also pulling every descendant map of the resolved
+-- zone (C_Map.GetMapChildrenInfo, all descendants) and matching against
+-- ANY of those names too - so a catalog tag for a sub-area still counts as
+-- "in zone" for whoever's standing anywhere in the parent zone.
+function D:GetCurrentZoneNames()
+	local mapID = C_Map.GetBestMapForUnit("player")
+	local names = {}
+	while mapID do
+		local mapInfo = C_Map.GetMapInfo(mapID)
+		if not mapInfo then break end
+		if mapInfo.name then names[mapInfo.name] = true end
+		if mapInfo.mapType == Enum.UIMapType.Zone then
+			local children = C_Map.GetMapChildrenInfo(mapID, nil, true)
+			if children then
+				for _, child in ipairs(children) do
+					if child.name then names[child.name] = true end
+				end
+			end
+			break
+		end
+		mapID = mapInfo.parentMapID
+	end
+	return names
+end
+
+-- Daily/Weekly items still left, GLOBALLY (every zone) - drives whether the
+-- floating icon shows AT ALL ("be there if there are dailies, weeklies, or
+-- whatever" - existence anywhere is what matters for visibility). Current
+-- tier counts unconditionally; Legacy tier counts too, but only for
+-- whichever Legacy zones/expansions have actually been checked on the
+-- General settings page (none checked means Legacy contributes nothing).
 function D:GetDailyWeeklyLeft()
 	local dailyCompleted, dailyTotal, weeklyCompleted, weeklyTotal = 0, 0, 0, 0
-	for _, tier in ipairs(self.Catalog.tiers) do
-		for _, typeSection in ipairs(tier.types) do
+
+	local currentTier = self.Catalog.tiers[1] -- "current", see BuildTiers()
+	for _, typeSection in ipairs(currentTier.types) do
+		if XComp.Options:IsTypeEnabled(typeSection.key) then
+			local resetEpoch = self:GetResetEpoch(typeSection.resetType)
+			local c, t = 0, 0
+			for _, category in ipairs(typeSection.categories) do
+				local cc, ct = self:CountVisibleItems(category.items, resetEpoch)
+				c = c + cc
+				t = t + ct
+			end
+			if typeSection.key == "daily" then
+				dailyCompleted = dailyCompleted + c
+				dailyTotal = dailyTotal + t
+			elseif typeSection.key == "weekly" then
+				weeklyCompleted = weeklyCompleted + c
+				weeklyTotal = weeklyTotal + t
+			end
+		end
+	end
+
+	if XComp.Options:IsLegacyEnabled() then
+		local legacyTier = self.Catalog.tiers[2] -- "legacy", see BuildTiers()
+		for _, typeSection in ipairs(legacyTier.types) do
 			if XComp.Options:IsTypeEnabled(typeSection.key) then
-				local c, t = self:CountType(typeSection)
-				if typeSection.key == "daily" then
-					dailyCompleted = dailyCompleted + c
-					dailyTotal = dailyTotal + t
-				elseif typeSection.key == "weekly" then
-					weeklyCompleted = weeklyCompleted + c
-					weeklyTotal = weeklyTotal + t
+				local resetEpoch = self:GetResetEpoch(typeSection.resetType)
+				for _, category in ipairs(typeSection.categories) do
+					local checkedItems = {}
+					for _, item in ipairs(category.items) do
+						local groupName = item.zone or category.label
+						if XComp.Options:IsLegacyZoneEnabled(groupName) then
+							table.insert(checkedItems, item)
+						end
+					end
+					local c, t = self:CountVisibleItems(checkedItems, resetEpoch)
+					if typeSection.key == "daily" then
+						dailyCompleted = dailyCompleted + c
+						dailyTotal = dailyTotal + t
+					elseif typeSection.key == "weekly" then
+						weeklyCompleted = weeklyCompleted + c
+						weeklyTotal = weeklyTotal + t
+					end
 				end
 			end
 		end
 	end
+
 	return dailyTotal - dailyCompleted, weeklyTotal - weeklyCompleted
+end
+
+-- Daily/Weekly items still left, CURRENT-ZONE ONLY (Current tier, items
+-- tagged with your current zone OR any sub-area physically inside it - see
+-- GetCurrentZoneNames above) - drives the floating icon's actual NUMBER
+-- (2026-09-29: "have the number only be how many are in the current
+-- zone"). Separate from GetDailyWeeklyLeft above, which drives whether the
+-- icon shows at all - the icon can be visible (something outstanding
+-- somewhere in the world) while this returns 0 (nothing in THIS zone
+-- specifically). Anything without a .zone tag, or tagged for a different
+-- zone, never counts here. Legacy is intentionally excluded - its own
+-- zones are a separate persistent opt-in list, not tied to live location.
+function D:GetDailyWeeklyLeftInCurrentZone()
+	local dailyCompleted, dailyTotal, weeklyCompleted, weeklyTotal = 0, 0, 0, 0
+	local currentZoneNames = self:GetCurrentZoneNames()
+	if not next(currentZoneNames) then return 0, 0 end
+
+	local currentTier = self.Catalog.tiers[1] -- "current", see BuildTiers()
+	for _, typeSection in ipairs(currentTier.types) do
+		if XComp.Options:IsTypeEnabled(typeSection.key) then
+			local resetEpoch = self:GetResetEpoch(typeSection.resetType)
+			local c, t = 0, 0
+			for _, category in ipairs(typeSection.categories) do
+				local inZone = {}
+				for _, item in ipairs(category.items) do
+					if item.zone and currentZoneNames[item.zone] then
+						table.insert(inZone, item)
+					end
+				end
+				local cc, ct = self:CountVisibleItems(inZone, resetEpoch)
+				c = c + cc
+				t = t + ct
+			end
+			if typeSection.key == "daily" then
+				dailyCompleted = dailyCompleted + c
+				dailyTotal = dailyTotal + t
+			elseif typeSection.key == "weekly" then
+				weeklyCompleted = weeklyCompleted + c
+				weeklyTotal = weeklyTotal + t
+			end
+		end
+	end
+
+	return dailyTotal - dailyCompleted, weeklyTotal - weeklyCompleted
+end
+
+-- Every distinct group name Legacy tier content would render under (real
+-- zone tags, plus the category label for anything without one) - same
+-- grouping rule UI.lua's RefreshSections already uses. Feeds the Legacy
+-- zone-picker checklist on the General settings page (2026-09-29,
+-- "select certain zones... instead of just totally not doing legacy") -
+-- sorted alphabetically so the checklist doesn't jump around between opens.
+function D:GetLegacyZoneNames()
+	local seen, names = {}, {}
+	local legacyTier = self.Catalog.tiers[2] -- "legacy", see BuildTiers()
+	for _, typeSection in ipairs(legacyTier.types) do
+		for _, category in ipairs(typeSection.categories) do
+			for _, item in ipairs(category.items) do
+				local groupName = item.zone or category.label
+				if not seen[groupName] then
+					seen[groupName] = true
+					table.insert(names, groupName)
+				end
+			end
+		end
+	end
+	table.sort(names)
+	return names
 end
 
 -------------------------------------------------
@@ -743,6 +1031,50 @@ local function EnsureUntrackedTable()
 	return XComp_DB.untrackedQuests
 end
 
+-- Real bug fixed 2026-09-29: rejecting a detected quest (deciding NOT to add
+-- it to the real catalog) had no persistent record anywhere - the next
+-- login/scan just re-detected the same questID off the quest log and put
+-- it right back in the report, forever, since nothing distinguished
+-- "never looked at this" from "looked at it and decided against it".
+-- This is that missing persistent list. Seeded with every ID already
+-- reviewed and rejected in past reports, so they stop resurfacing:
+--   75511  Tracking Quest - Blizzard's own internal hidden-quest type
+--   91193  Special Assignment: Capstone 1 - Unlock - prerequisite/unlock
+--          step, not a real reward quest
+--   91203  Special Assignment: Capstone 2 - Unlock - same as above
+--   95435  Shade and Claw - the real trackable quest is a different ID
+--          (92139), already in the catalog
+--   72292  Story of a Spectacular Victory - confirmed via Wowhead: this is
+--          Dragonflight/Iskaara Tuskarr content (patch 10.0.2), not
+--          Midnight at all - wrong expansion entirely
+--   Rejected 2026-10-24 (old-expansion or junk, approved by Jason):
+--   72560 Climbing ("Kill Credit: NEVER [DNT]"); Legion world-quest weeklies
+--   43179 42234 42420 48641 42422 48642; Shadowlands 61981 92650; 45563
+--   Shrouded Coin (Timeless Isle); 13101 Dalaran cooking daily; 83070
+--   Titanic Resurgence (The War Within, Isle of Dorn)
+-- Re-applied on every call (not just first creation) so existing saved
+-- tables pick up newly seeded IDs.
+local SEED_EXCLUDED = {
+	75511, 91193, 91203, 95435, 72292,
+	72560, 43179, 42234, 42420, 48641, 42422, 48642,
+	61981, 92650, 45563, 13101, 83070,
+}
+local function EnsureExcludedTable()
+	if not XComp_DB.excludedQuests then
+		XComp_DB.excludedQuests = {}
+	end
+	local excluded = XComp_DB.excludedQuests
+	for _, id in ipairs(SEED_EXCLUDED) do excluded[id] = true end
+	return excluded
+end
+
+-- Marks a questID as permanently reviewed-and-rejected, and clears it out
+-- of the untracked table too if it's sitting there right now.
+function D:ExcludeQuest(questID)
+	EnsureExcludedTable()[questID] = true
+	EnsureUntrackedTable()[questID] = nil
+end
+
 -- Checks a single questID: if it's a live Daily/Weekly/recurring quest (per
 -- the game's own classification) and isn't anywhere in the catalog yet,
 -- records it. Returns true if this was a NEW find (not already recorded),
@@ -761,6 +1093,7 @@ end
 function D:CheckQuestForCatalog(questID)
 	if not questID then return false end
 	if self:FindItemByQuestID(questID) then return false end -- already tracked
+	if EnsureExcludedTable()[questID] then return false end -- reviewed, rejected
 
 	local logIndex = C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(questID)
 	if not logIndex then return false end
@@ -824,9 +1157,10 @@ end
 -- existed).
 function D:GetUntrackedQuests()
 	local untracked = EnsureUntrackedTable()
+	local excluded = EnsureExcludedTable()
 	local list = {}
 	for questID, entry in pairs(untracked) do
-		if self:FindItemByQuestID(questID) then
+		if self:FindItemByQuestID(questID) or excluded[questID] then
 			untracked[questID] = nil
 		else
 			table.insert(list, { questID = questID, name = entry.name, frequency = entry.frequency, firstSeen = entry.firstSeen, zoneGuess = entry.zoneGuess })
