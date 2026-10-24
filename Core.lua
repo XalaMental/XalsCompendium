@@ -23,119 +23,90 @@ end
 -------------------------------------------------
 -- Shared theme
 -------------------------------------------------
--- Default gold/copper accent (matches Craft Courier's C_ACCENT). Customizable
--- via XComp_DB.accentColor - GetAccentColor() is the single source of truth
--- every file should read from, so the whole addon re-themes consistently
--- rather than each file having its own hardcoded copy.
-XComp.DEFAULT_ACCENT = { 0.72, 0.55, 0.22 }
+-- Fixed brand colors/fonts (2026-09-29 correction) - Compendium used to let
+-- players override the accent and background color, and pick their own
+-- font/outline/size, via a "Colors" settings page. Jason's own words: "take
+-- out the background color and accent color, period... just leave it with
+-- ours, ours is the default" - meaning not just a better default, the
+-- override capability itself is gone. GetAccentColor()/GetBgColor() and the
+-- TitleFont/BodyFont objects below remain the single source of truth every
+-- file reads from (so the whole addon still re-themes from one place if
+-- the brand colors ever change again), they just no longer consult
+-- XComp_DB.accentColor/bgColor/text at all.
+XComp.DEFAULT_ACCENT = { 0.4078, 0.0784, 0.0902 } -- #681417, dark brick red
 function XComp.GetAccentColor()
-	local c = XComp_DB.accentColor
-	if c then return c[1], c[2], c[3] end
 	return XComp.DEFAULT_ACCENT[1], XComp.DEFAULT_ACCENT[2], XComp.DEFAULT_ACCENT[3]
 end
 
 -- Background fill color - separate from accent (borders/text) and separate
 -- from the transparency slider (alpha only). Single source of truth so the
 -- main tracker AND both settings windows stay visually consistent with each
--- other instead of only one of them picking up a custom background.
-XComp.DEFAULT_BG = { 0.035, 0.035, 0.035 }
+-- other.
+XComp.DEFAULT_BG = { 0.03, 0.028, 0.06 } -- #08070f, dark indigo
 function XComp.GetBgColor()
-	local c = XComp_DB.bgColor
-	if c then return c[1], c[2], c[3] end
 	return XComp.DEFAULT_BG[1], XComp.DEFAULT_BG[2], XComp.DEFAULT_BG[3]
 end
 
--- Standard dark text shadow - used only by the fixed-branding Morpheus
--- titles (window titles), which are NOT part of the customizable font
--- system below by design (the branded look stays fixed). Everything else
--- readable gets its shadow from the shared font objects instead.
+-- Fixed structural divider/border color - #101020, near-black indigo, from
+-- the family-wide 2026-09-20 brand rollout. Every window's own OUTER border
+-- and card/panel edges use this instead of the accent color, so the accent
+-- reads clearly on titles/labels/buttons without recoloring every border in
+-- the addon too. The ONE exception is the header divider directly under a
+-- window's title, which stays the accent color.
+XComp.DIVIDER_COLOR = { 0.0627, 0.0627, 0.1255 }
+
+-- Fixed unselected-sidebar-link color - #323264, muted blue-gray, from the
+-- same 2026-09-20 rollout. ONLY for an unselected link in a standalone
+-- window's own sidebar (the Options window's General/Currencies/
+-- Diagnostics/Backup tabs when they're not the active page) - selected
+-- still uses the accent color, and this never applies to an ordinary
+-- button elsewhere. Sidebar tabs used to fall back to the same accent color
+-- as everything else, which read as "every tab is active at once" instead
+-- of showing one clear current page.
+XComp.SIDEBAR_UNSELECTED = { 0.196, 0.196, 0.392 }
+
+-- Fixed title font - Cinzel Bold, the current go-forward brand pairing.
+-- This is for every window's own fixed "Xal's Compendium" branded title
+-- text specifically.
+XComp.TITLE_FONT_PATH = "Interface\\AddOns\\XalsCompendium\\Fonts\\Cinzel-Bold.ttf"
+
+-- Standard dark text shadow - used by fixed-branding titles (window
+-- titles). Everything else readable gets its shadow from the shared font
+-- objects instead.
 function XComp.ApplyTextShadow(fontString)
 	fontString:SetShadowOffset(1, -1)
 	fontString:SetShadowColor(0, 0, 0, 1)
 end
 
 -------------------------------------------------
--- Customizable text (font, size, outline, shadow) - build-plan item, ported
--- from the exact working pattern already shipping in XalsQuestCompass
--- (FONT_OPTIONS/OUTLINE_OPTIONS tables, shared CreateFont() objects,
--- ApplyFontSettings with a pcall fallback). "Custom" points at this addon's
--- OWN Fonts/CustomFont.ttf - unlike Compass, no font file ships here by
--- default (that would mean copying someone else's licensed asset into a
--- second addon); drop your own .ttf there with that exact name to use it.
+-- Shared readable-text fonts - Cinzel Bold for prominent text (section/type
+-- headers, settings row names), Inter Regular for secondary text (item
+-- labels, descriptions). Fixed, not player-customizable (see the note
+-- above) - everything readable still draws from one of these two objects
+-- via :SetFontObject() so the whole addon stays visually consistent from
+-- one place, they just never change once set.
 -------------------------------------------------
-XComp.FONT_OPTIONS = {
-	{ key = "FRIZQT", name = "Friz Quadrata (default)", path = "Fonts\\FRIZQT__.TTF" },
-	{ key = "ARIALN", name = "Arial Narrow", path = "Fonts\\ARIALN.TTF" },
-	{ key = "SKURRI", name = "Skurri", path = "Fonts\\SKURRI.TTF" },
-	{ key = "MORPHEUS", name = "Morpheus", path = "Fonts\\MORPHEUS.TTF" },
-	{ key = "CUSTOM", name = "Simply Sans Bold", path = "Interface\\AddOns\\XalsCompendium\\Fonts\\CustomFont.ttf" },
-}
-
-XComp.OUTLINE_OPTIONS = {
-	{ key = "NONE", name = "None", flag = "" },
-	{ key = "OUTLINE", name = "Outline", flag = "OUTLINE" },
-	{ key = "THICKOUTLINE", name = "Thick Outline", flag = "THICKOUTLINE" },
-}
-
-function XComp.GetFontOption(key)
-	for _, opt in ipairs(XComp.FONT_OPTIONS) do
-		if opt.key == key then return opt end
-	end
-	return XComp.FONT_OPTIONS[1]
-end
-
-function XComp.GetOutlineOption(key)
-	for _, opt in ipairs(XComp.OUTLINE_OPTIONS) do
-		if opt.key == key then return opt end
-	end
-	return XComp.OUTLINE_OPTIONS[1]
-end
-
--- Two shared font objects - everything readable draws from one of these via
--- :SetFontObject(), so a single settings change updates the whole addon at
--- once instead of touching dozens of individual FontStrings. TitleFont is
--- for prominent text (section/type headers, settings row names); BodyFont
--- is for secondary text (item labels, descriptions).
 XComp.TitleFont = CreateFont("XalsCompendiumTitleFont")
 XComp.BodyFont = CreateFont("XalsCompendiumBodyFont")
--- Seeded with a guaranteed-valid stock font immediately, so anything using
--- these before ApplyFontSettings() runs never hits a "Font not set" error.
-XComp.TitleFont:SetFont("Fonts\\FRIZQT__.TTF", 14, "")
-XComp.BodyFont:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
 
 function XComp.ApplyFontSettings()
-	XComp_DB.text = XComp_DB.text or {}
-	local t = XComp_DB.text
-	if t.fontKey == nil then t.fontKey = "CUSTOM" end
-	if t.outlineKey == nil then t.outlineKey = "OUTLINE" end
-	if t.fontSize == nil then t.fontSize = 13 end
-	local opt = XComp.GetFontOption(t.fontKey)
-	local outline = XComp.GetOutlineOption(t.outlineKey)
-	local size = t.fontSize
+	XComp.TitleFont:SetFont(XComp.TITLE_FONT_PATH, 15, "OUTLINE")
+	XComp.BodyFont:SetFont("Interface\\AddOns\\XalsCompendium\\Fonts\\Inter-Regular.ttf", 13, "")
 
-	local ok = pcall(function()
-		XComp.TitleFont:SetFont(opt.path, size + 2, outline.flag)
-		XComp.BodyFont:SetFont(opt.path, math.max(8, size - 2), outline.flag)
-	end)
-	if not ok then
-		-- Falls back to the default stock font if a custom/missing file was picked.
-		local default = XComp.FONT_OPTIONS[1]
-		XComp.TitleFont:SetFont(default.path, size + 2, outline.flag)
-		XComp.BodyFont:SetFont(default.path, math.max(8, size - 2), outline.flag)
-	end
-
-	local shadowOn = t.shadowEnabled
-	if shadowOn == nil then shadowOn = true end
-	local sc = t.shadowColor or { 0, 0, 0 }
-	XComp.TitleFont:SetShadowOffset(shadowOn and 1 or 0, shadowOn and -1 or 0)
-	XComp.TitleFont:SetShadowColor(sc[1], sc[2], sc[3], shadowOn and 1 or 0)
-	XComp.BodyFont:SetShadowOffset(shadowOn and 1 or 0, shadowOn and -1 or 0)
-	XComp.BodyFont:SetShadowColor(sc[1], sc[2], sc[3], shadowOn and 1 or 0)
+	XComp.TitleFont:SetShadowOffset(1, -1)
+	XComp.TitleFont:SetShadowColor(0, 0, 0, 1)
+	XComp.BodyFont:SetShadowOffset(1, -1)
+	XComp.BodyFont:SetShadowColor(0, 0, 0, 1)
 
 	if XComp.UI and XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then
 		XComp.UI:RefreshSections()
 	end
 end
+-- Seeded immediately (not just at ADDON_LOADED) so anything using these
+-- fonts before Core's own login handler runs never hits a "Font not set"
+-- error - same guarantee the old stock-font seed gave, just pointed at the
+-- real brand font from the start instead of a placeholder.
+XComp.ApplyFontSettings()
 
 -------------------------------------------------
 -- Shared widgets
@@ -297,7 +268,14 @@ f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("QUEST_TURNED_IN")
 f:RegisterEvent("QUEST_ACCEPTED")
 f:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+f:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
 f:SetScript("OnEvent", function(_, event, ...)
+	if event == "CALENDAR_UPDATE_EVENT_LIST" then
+		XComp.Data:ClearHolidayCache()
+		if XComp.RefreshFloatingIcon then XComp.RefreshFloatingIcon() end
+		if XComp.UI.mainFrame and XComp.UI.mainFrame:IsShown() then XComp.UI:RefreshSections() end
+		return
+	end
 	if event == "ADDON_LOADED" then
 		local addonName = ...
 		if addonName ~= "XalsCompendium" then return end
@@ -320,6 +298,19 @@ f:SetScript("OnEvent", function(_, event, ...)
 		XComp.Data:CheckMaintenanceReminder()
 		C_Timer.NewTicker(1800, function() XComp.Data:CheckMaintenanceReminder() end)
 		if XComp.WhatsNew then XComp.WhatsNew:CheckAndShow() end
+		-- Calendar data has to be requested from the server, and not while
+		-- the client is still loading; CALENDAR_UPDATE_EVENT_LIST above
+		-- re-checks holiday items once it arrives.
+		C_Timer.After(10, function() C_Calendar.OpenCalendar() end)
+		-- Floating icon (separate from the fixed minimap button) - set its
+		-- initial state now, independent of whether the tracker window ever
+		-- gets opened this session, then keep it current on a ticker so it
+		-- reappears on its own the moment a daily/weekly reset happens
+		-- without needing a relog.
+		if XComp.RefreshFloatingIcon then
+			XComp.RefreshFloatingIcon()
+			C_Timer.NewTicker(600, function() XComp.RefreshFloatingIcon() end)
+		end
 		-- Untracked-quest auto-detection - dev-only, see XComp.IsDevMode
 		-- above. Off for every real player by default; only runs at all
 		-- once the hidden slash command has switched it on for this
@@ -355,6 +346,7 @@ f:SetScript("OnEvent", function(_, event, ...)
 				XComp.UI:RefreshSections()
 			else
 				XComp.UI:ShowCompletionToast("Completed: " .. item.name)
+				if XComp.RefreshFloatingIcon then XComp.RefreshFloatingIcon() end
 			end
 		end
 	elseif event == "CURRENCY_DISPLAY_UPDATE" then
