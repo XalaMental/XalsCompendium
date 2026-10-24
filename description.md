@@ -16,12 +16,14 @@ Compendium tracks your dailies, weeklies, and one-time content in one clean wind
 - **Automatic completion detection** - reads your real quest progress, including live multi-step objectives (e.g. "3/5 dungeons"), so most items track themselves.
 - **Great Vault & currencies panel** - a small icon panel next to the tracker shows your Great Vault progress and tracked currencies at a glance, with a tooltip on hover.
 - **Rotating content, handled correctly** - things like the weekly dungeon board or Showdown zones only show up when they're actually live that cycle, instead of listing every possibility as if they're all active at once.
-- **Daily / Weekly / Legacy tabs** for switching which content you're looking at.
+- **Floating icon** - shows whenever any daily or weekly is still open, with a number for what's left in the zone you're standing in. Drag it anywhere, resize it, or turn it off in settings.
+- **Zone, Daily, Weekly and Legacy tabs** - the Zone tab shows your dailies and weeklies together for wherever you are right now.
+- **Legacy, your way** - pick which old expansions to track from a dropdown; nothing from Legacy shows until you choose it.
+- **Holiday events** - seasonal dailies like Hallow's End appear only while the event is running.
 - **Fade when idle** - the window fades out of sight when you're not using it and snaps back the moment you hover it.
-- **Minimize button** - collapse the tracker into a small "D / W" bar showing what's left, without closing it.
 - **One-click waypoints** - a Map button on trackable quests for instant TomTom navigation.
 - **Alt roster** - check in on your other characters' progress without logging into them.
-- **Fully customizable look** - accent color, background color/transparency, fonts, and window scale, all adjustable in settings.
+- **Window options** - background transparency and window scale, adjustable in settings.
 - **Real minimap button** - left-click opens the tracker, right-click opens settings.
 
 ---
